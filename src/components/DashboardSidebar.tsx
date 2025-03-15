@@ -118,9 +118,9 @@ const DashboardSidebar = () => {
             />
             <SidebarItem 
               icon={<Users size={20} />} 
-              title={isCollapsed ? "" : "Applications"} 
-              href="/dashboard/applications" 
-              isActive={pathname === '/dashboard/applications'}
+              title={isCollapsed ? "" : "Template"} 
+              href="/dashboard/templates" 
+              isActive={pathname === '/dashboard/templates'}
             />
             <SidebarItem 
               icon={<Bell size={20} />} 

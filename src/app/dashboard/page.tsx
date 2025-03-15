@@ -1,14 +1,15 @@
 "use client"
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import DashboardSidebar from '@/components/DashboardSidebar';
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Send, PaperclipIcon } from 'lucide-react';
+import { Upload, FileText, Wand2, Loader2, LayoutTemplate ,  Eye, Code} from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
 
 interface Resume {
   id: number | string;
@@ -19,36 +20,35 @@ interface Resume {
   url?: string;
 }
 
-interface Message {
+interface Template {
   id: string;
-  content: string;
-  sender: 'user' | 'ai';
-  timestamp: Date;
-  attachments?: Resume[];
+  name: string;
+  description: string;
+  category: 'professional' | 'creative' | 'academic' | 'simple';
+  preview_url: string;
+  created_at: string;
+  is_premium: boolean;
+  latex_content?: string;
 }
 
 export default function Dashboard() {
   const [uploadedResumes, setUploadedResumes] = useState<Resume[]>([]);
-  const [selectedResumes, setSelectedResumes] = useState<Resume[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputMessage, setInputMessage] = useState('');
+  const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [showFileSelector, setShowFileSelector] = useState(false);
+  const [jobDescription, setJobDescription] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedLatex, setGeneratedLatex] = useState('');
+  const [activeTab, setActiveTab] = useState<'resumes' | 'templates'>('resumes');
+  const [previewMode, setPreviewMode] = useState<'raw' | 'preview'>('raw');
   
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
   
   useEffect(() => {
     fetchResumes();
+    fetchTemplates();
   }, []);
-  
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-  
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
   
   const fetchResumes = async () => {
     try {
@@ -95,6 +95,25 @@ export default function Dashboard() {
       toast("Error: Failed to load resumes");
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  const fetchTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('templates')
+        .select('*');
+        
+      if (error) {
+        throw error;
+      }
+      
+      if (data) {
+        setTemplates(data);
+      }
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+      toast("Error: Failed to load templates");
     }
   };
   
@@ -150,7 +169,9 @@ export default function Dashboard() {
       }
       
       setUploadedResumes(prev => [...prev, ...newResumes]);
-      setSelectedResumes(prev => [...prev, ...newResumes]);
+      if (newResumes.length > 0) {
+        setSelectedResume(newResumes[0]);
+      }
       toast("Success: Resume(s) uploaded successfully");
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -160,45 +181,127 @@ export default function Dashboard() {
     }
   };
   
-  const toggleResumeSelection = (resume: Resume) => {
-    if (selectedResumes.some(r => r.id === resume.id)) {
-      setSelectedResumes(selectedResumes.filter(r => r.id !== resume.id));
-    } else {
-      setSelectedResumes([...selectedResumes, resume]);
-    }
+  const selectResume = (resume: Resume) => {
+    setSelectedResume(resume);
   };
   
-  const sendMessage = async () => {
-    if (!inputMessage.trim() && selectedResumes.length === 0) return;
+  const selectTemplate = (template: Template) => {
+    setSelectedTemplate(template);
+    toast(`Template "${template.name}" selected`);
+  };
+
+  const handleGenerateResume = async () => {
+    if (!selectedTemplate || !selectedResume || !jobDescription.trim()) {
+      toast("Please select a template, a resume, and provide a job description");
+      return;
+    }
     
-    // Add user message to chat
-    const userMessage: Message = {
-      id: uuidv4(),
-      content: inputMessage,
-      sender: 'user',
-      timestamp: new Date(),
-      attachments: selectedResumes.length > 0 ? [...selectedResumes] : undefined
-    };
+    setIsGenerating(true);
     
-    setMessages(prev => [...prev, userMessage]);
-    setInputMessage('');
-    setSelectedResumes([]);
-    setShowFileSelector(false);
-    
-    // Simulate AI response (in a real app, you'd call your backend/API here)
-    setIsLoading(true);
-    
-    setTimeout(() => {
-      const aiMessage: Message = {
-        id: uuidv4(),
-        content: "I've received your message and will process your resume(s). What would you like me to help you with?",
-        sender: 'ai',
-        timestamp: new Date()
-      };
+    try {
+      // Get the template's LaTeX content if not already loaded
+      let templateWithLatex = selectedTemplate;
+      if (!selectedTemplate.latex_content) {
+        const { data, error } = await supabase
+          .from('templates')
+          .select('latex_content')
+          .eq('id', selectedTemplate.id)
+          .single();
+          
+        if (error) throw error;
+        
+        if (data) {
+          templateWithLatex = {
+            ...selectedTemplate,
+            latex_content: data.latex_content
+          };
+        }
+      }
       
-      setMessages(prev => [...prev, aiMessage]);
-      setIsLoading(false);
-    }, 1500);
+      // Ensure the resume URL is still valid (they expire after 24 hours)
+      let resumeWithValidUrl = selectedResume;
+      if (selectedResume.url) {
+        try {
+          // Check if URL is still valid with a HEAD request
+          const urlCheck = await fetch(selectedResume.url, { method: 'HEAD' });
+          if (!urlCheck.ok) {
+            // URL expired, get a new one
+            console.log('Resume URL expired, generating new signed URL');
+            const { data: urlData } = await supabase
+              .storage
+              .from('resumes')
+              .createSignedUrl(selectedResume.path || '', 60 * 60 * 24);
+              
+            if (urlData?.signedUrl) {
+              resumeWithValidUrl = {
+                ...selectedResume,
+                url: urlData.signedUrl
+              };
+            }
+          }
+        } catch (error) {
+          console.error('Error checking resume URL:', error);
+          // Will continue with existing URL and let the API handle any issues
+        }
+      }
+      
+      // System prompt for Gemini
+      const systemPrompt = `
+You are an expert resume tailoring assistant. Your task is to customize a LaTeX resume template 
+based on the provided resume PDF and job description. Focus on:
+1. Highlighting relevant skills and experiences that match the job requirements
+2. Reorganizing content to emphasize the most relevant qualifications
+3. Maintaining the original LaTeX structure and formatting
+4. Ensuring the output is valid LaTeX code that can be compiled
+5. Please don't add any unnecessary text, or comments in the latex, cause it's going to be used as an actualy resume.
+`;
+      
+      // Log what's being sent to Gemini
+      console.log('Sending to Gemini API:', {
+        resumeName: resumeWithValidUrl.name,
+        resumeUrl: resumeWithValidUrl.url ? 'URL provided' : 'No URL',
+        templateName: templateWithLatex.name,
+        templateWithLatex: templateWithLatex,
+        jobDescriptionLength: jobDescription.length,
+        templateContentLength: templateWithLatex.latex_content?.length || 0
+      });
+      
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          systemPrompt,
+          resume: resumeWithValidUrl,
+          template: templateWithLatex,
+          jobDescription,
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to generate customized resume');
+      }
+      
+      const data = await response.json();
+      
+      // Log what's being received from Gemini
+      console.log('Received from Gemini API:', {
+        modifiedLatexLength: data.modifiedLatex?.length || 0,
+        originalResponseLength: data.originalResponse?.length || 0
+      });
+      
+      setGeneratedLatex(data.modifiedLatex);
+      
+      toast.success("Resume template customized successfully!");
+      
+    } catch (error) {
+      console.error('Error generating resume:', error);
+      toast.error(error instanceof Error ? error.message : "Failed to customize resume template");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -206,183 +309,235 @@ export default function Dashboard() {
       <DashboardSidebar />
       <main className="flex-1 p-6 flex flex-col">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Resume Assistant</h1>
+          <h1 className="text-2xl font-bold">Resume Builder</h1>
         </div>
         
-        <Card className="flex-1 flex flex-col overflow-hidden">
-          <CardContent className="flex-1 flex flex-col p-0">
-            {/* Chat messages area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-gray-500">
-                  <div className="text-center">
-                    <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium mb-2">Welcome to Resume Assistant</h3>
-                    <p className="max-w-md">
-                      Upload your resume or select from your files to get started. 
-                      I can help you improve your resume, create cover letters, or prepare for interviews.
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-150px)]">
+          {/* Left side - Job Description and Selection */}
+          <Card className="flex flex-col overflow-hidden">
+            <CardContent className="flex-1 flex flex-col p-4">
+              <div className="mb-4">
+                <Label htmlFor="job-description" className="text-lg font-medium mb-2 block">
+                  Job Description
+                </Label>
+                <Textarea
+                  id="job-description"
+                  placeholder="Paste the job description here to tailor your resume..."
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  className="min-h-[200px] resize-none"
+                />
+              </div>
+              
+              <div className="flex-1 overflow-hidden">
+                <Tabs defaultValue={activeTab} onValueChange={(value) => setActiveTab(value as 'resumes' | 'templates')}>
+                  <TabsList className="w-full">
+                    <TabsTrigger value="resumes" className="flex-1">Resumes</TabsTrigger>
+                    <TabsTrigger value="templates" className="flex-1">Templates</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="resumes" className="h-[calc(100%-40px)] overflow-y-auto">
+                    {uploadedResumes.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                        <p>No resumes uploaded yet</p>
+                        <label htmlFor="file-upload" className="cursor-pointer mt-4 inline-block">
+                          <Button variant="outline" size="sm" className="gap-2">
+                            <Upload className="h-4 w-4" />
+                            Upload Resume
+                          </Button>
+                          <input
+                            id="file-upload"
+                            type="file"
+                            className="hidden"
+                            multiple
+                            accept=".pdf,.doc,.docx"
+                            onChange={handleFileInput}
+                            disabled={isLoading}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 gap-2 mt-2">
+                          {uploadedResumes.map((resume) => (
+                            <div 
+                              key={resume.id.toString()}
+                              className={`border rounded p-3 cursor-pointer flex items-center ${
+                                selectedResume?.id === resume.id 
+                                  ? 'border-blue-500 bg-blue-50' 
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                              onClick={() => selectResume(resume)}
+                            >
+                              <FileText className="h-5 w-5 mr-3 text-blue-500" />
+                              <div className="flex-1">
+                                <div className="font-medium truncate">{resume.name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {resume.date} • {resume.size}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        <div className="mt-4 flex justify-center">
+                          <label htmlFor="file-upload" className="cursor-pointer">
+                            <Button variant="outline" size="sm" className="gap-2">
+                              <Upload className="h-4 w-4" />
+                              Upload New
+                            </Button>
+                            <input
+                              id="file-upload"
+                              type="file"
+                              className="hidden"
+                              multiple
+                              accept=".pdf,.doc,.docx"
+                              onChange={handleFileInput}
+                              disabled={isLoading}
+                            />
+                          </label>
+                        </div>
+                      </>
+                    )}
+                  </TabsContent>
+                  
+                  <TabsContent value="templates" className="h-[calc(100%-40px)] overflow-y-auto">
+                    {templates.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <LayoutTemplate className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                        <p>No templates available</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-2 mt-2">
+                        {templates.map((template) => (
+                          <div 
+                            key={template.id}
+                            className={`border rounded p-3 cursor-pointer flex items-center ${
+                              selectedTemplate?.id === template.id 
+                                ? 'border-blue-500 bg-blue-50' 
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                            onClick={() => selectTemplate(template)}
+                          >
+                            <LayoutTemplate className="h-5 w-5 mr-3 text-blue-500" />
+                            <div className="flex-1">
+                              <div className="font-medium">{template.name}</div>
+                              <div className="text-xs text-gray-500">
+                                {template.category} • {template.is_premium ? 'Premium' : 'Free'}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <Button 
+                  onClick={handleGenerateResume} 
+                  disabled={isGenerating || !selectedTemplate || !selectedResume || !jobDescription.trim()}
+                  className="w-full"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="mr-2 h-4 w-4" />
+                      Generate Customized Resume
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          
+          {/* Right side - Preview and Download */}
+          <Card className="flex flex-col overflow-hidden">
+            <CardContent className="flex-1 flex flex-col p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium">Generated Resume</h2>
+                {generatedLatex && (
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <FileText className="h-4 w-4" />
+                    Download PDF
+                  </Button>
+                )}
+              </div>
+              
+              {!generatedLatex ? (
+                <div className="flex-1 flex items-center justify-center text-center p-6 border-2 border-dashed border-gray-200 rounded-lg">
+                  <div>
+                    <Wand2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No Resume Generated Yet</h3>
+                    <p className="text-gray-500 max-w-md">
+                      Select a resume template, upload your resume, and provide a job description to generate a customized resume.
                     </p>
                   </div>
                 </div>
               ) : (
-                messages.map((message) => (
-                  <div 
-                    key={message.id} 
-                    className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div 
-                      className={`max-w-[80%] rounded-lg p-4 ${
-                        message.sender === 'user' 
-                          ? 'bg-blue-500 text-white' 
-                          : 'bg-gray-200 text-gray-800'
-                      }`}
-                    >
-                      <div className="whitespace-pre-wrap">{message.content}</div>
-                      
-                      {message.attachments && message.attachments.length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-gray-300 border-opacity-30">
-                          <p className="text-sm mb-1">Attached files:</p>
-                          <div className="flex flex-wrap gap-2">
-                            {message.attachments.map(file => (
-                              <div 
-                                key={file.id.toString()} 
-                                className="text-xs px-2 py-1 rounded bg-opacity-20 bg-gray-700 flex items-center"
-                              >
-                                <FileText className="h-3 w-3 mr-1" />
-                                <span className="truncate max-w-[150px]">{file.name}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="text-xs mt-1 opacity-70">
-                        {message.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                <div className="flex-1 overflow-hidden bg-white border border-gray-200 rounded-lg">
+                  <Tabs value={previewMode} onValueChange={(value) => setPreviewMode(value as 'raw' | 'preview')} className="w-full">
+                    <TabsList className="w-full mb-2">
+                      <TabsTrigger value="raw" className="flex-1 gap-2">
+                        <Code className="h-4 w-4" />
+                        Raw LaTeX
+                      </TabsTrigger>
+                      <TabsTrigger value="preview" className="flex-1 gap-2">
+                        <Eye className="h-4 w-4" />
+                        Preview
+                      </TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="raw" className="h-full">
+                      <div className="h-full overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+                        <pre className="text-xs whitespace-pre-wrap font-mono">
+                          {generatedLatex}
+                        </pre>
                       </div>
-                    </div>
-                  </div>
-                ))
+                    </TabsContent>
+                    
+                    <TabsContent value="preview" className="h-full">
+                      <div className="h-full overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+                        <div className="flex items-center justify-center h-full">
+                         
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
               )}
-              <div ref={messagesEndRef} />
-            </div>
-            
-            {/* File selector area */}
-            {showFileSelector && (
-              <div className="border-t border-gray-200 max-h-[200px] overflow-y-auto p-4">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="font-medium">Select Files</h3>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setShowFileSelector(false)}
-                  >
-                    Close
-                  </Button>
-                </div>
-                
-                {uploadedResumes.length === 0 ? (
-                  <div className="text-center py-4 text-gray-500">
-                    No resumes uploaded yet
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                    {uploadedResumes.map((resume) => (
-                      <div 
-                        key={resume.id.toString()}
-                        className={`border rounded p-2 cursor-pointer flex items-center ${
-                          selectedResumes.some(r => r.id === resume.id) 
-                            ? 'border-blue-500 bg-blue-50' 
-                            : 'border-gray-200'
-                        }`}
-                        onClick={() => toggleResumeSelection(resume)}
-                      >
-                        <FileText className="h-4 w-4 mr-2 text-blue-500" />
-                        <div className="truncate text-sm">{resume.name}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                <div className="mt-3 flex justify-center">
-                  <label htmlFor="file-upload" className="cursor-pointer">
-                    <Button variant="outline" size="sm" className="gap-2">
-                      <Upload className="h-4 w-4" />
-                      Upload New
-                    </Button>
-                    <input
-                      id="file-upload"
-                      type="file"
-                      className="hidden"
-                      multiple
-                      accept=".pdf,.doc,.docx"
-                      onChange={handleFileInput}
-                      disabled={isLoading}
-                    />
-                  </label>
-                </div>
-              </div>
-            )}
-            
-            {/* Input area */}
-            <div className="border-t border-gray-200 p-4">
-              <div className="flex items-end gap-2">
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="outline"
-                  onClick={() => setShowFileSelector(!showFileSelector)}
-                  className="rounded-full h-10 w-10 flex-shrink-0"
-                >
-                  <PaperclipIcon className="h-5 w-5" />
-                </Button>
-                
-                <div className="flex-1 relative">
-                  <Textarea
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    placeholder="Type your message here..."
-                    className="resize-none min-h-[60px] pr-12"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        sendMessage();
-                      }
-                    }}
-                  />
-                  
-                  {selectedResumes.length > 0 && (
-                    <div className="absolute bottom-2 left-2 flex gap-1">
-                      {selectedResumes.length > 3 ? (
-                        <div className="text-xs bg-blue-100 text-blue-800 rounded px-2 py-1">
-                          {selectedResumes.length} files selected
-                        </div>
-                      ) : (
-                        selectedResumes.map(file => (
-                          <div 
-                            key={file.id.toString()} 
-                            className="text-xs bg-blue-100 text-blue-800 rounded px-2 py-1 flex items-center"
-                          >
-                            <FileText className="h-3 w-3 mr-1" />
-                            <span className="truncate max-w-[80px]">{file.name}</span>
-                          </div>
-                        ))
-                      )}
+              
+              {generatedLatex && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-medium">Resume customized for job description</p>
+                      <p className="text-xs text-gray-500">
+                        Using {selectedResume?.name} and {selectedTemplate?.name} template
+                      </p>
                     </div>
-                  )}
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        // Reset the generated content
+                        setGeneratedLatex('');
+                      }}
+                    >
+                      Generate New
+                    </Button>
+                  </div>
                 </div>
-                
-                <Button
-                  type="button"
-                  onClick={sendMessage}
-                  disabled={isLoading || (!inputMessage.trim() && selectedResumes.length === 0)}
-                  className="rounded-full h-10 w-10 flex-shrink-0"
-                >
-                  <Send className="h-5 w-5" />
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   );
