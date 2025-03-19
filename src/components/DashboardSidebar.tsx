@@ -103,7 +103,7 @@ const DashboardSidebar = () => {
 
         {/* Sidebar Content */}
         <div className="flex-1 overflow-auto py-4 px-3">
-          <div className="space-y-1">
+          <div className="space-y-4">
             <SidebarItem 
               icon={<LayoutDashboard size={20} />} 
               title={isCollapsed ? "" : "Dashboard"} 
@@ -144,7 +144,7 @@ const DashboardSidebar = () => {
         </div>
 
         {/* Create New Resume Button */}
-        <div className="p-4 border-t">
+        {/* <div className="p-4 border-t">
           {isCollapsed ? (
             <Button size="icon" className="w-full bg-blue-500 hover:bg-blue-600">
               <PlusCircle size={20} />
@@ -155,7 +155,7 @@ const DashboardSidebar = () => {
               Create Resume
             </Button>
           )}
-        </div>
+        </div> */}
 
         {/* User Profile */}
         <div className="p-4 border-t flex items-center gap-3">

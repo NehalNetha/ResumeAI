@@ -1,48 +1,36 @@
 "use client"
-import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2, Save, Download, Eye, ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Eye, Save, LayoutTemplate } from 'lucide-react';
 import DashboardSidebar from '@/components/DashboardSidebar';
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { createClient } from '@/utils/supabase/client';
 
-interface ResumeSection {
+// Import our new components
+import PersonalInfoTab from '@/components/resume-builder/PersonalInfoTab';
+import WorkExperienceTab from '@/components/resume-builder/WorkExperienceTab';
+import EducationTab from '@/components/resume-builder/EducationTab';
+import ProjectsTab from '@/components/resume-builder/ProjectsTab';
+import SkillsTab from '@/components/resume-builder/SkillsTab';
+import LinksTab from '@/components/resume-builder/LinksTab';
+import AddSectionDialog from '@/components/resume-builder/AddSectionDialog';
+
+// Import types
+import { PersonalInfo, ResumeSection, Skill, Link } from '@/types/resume';
+
+// Template interface
+interface Template {
   id: string;
-  title: string;
-  company?: string;
-  location?: string;
-  startDate: string;
-  endDate: string;
+  name: string;
   description: string;
-  bullets: string[];
-  projectUrl?: string; // Add this field for project links
-
-}
-
-interface PersonalInfo {
-  name: string;
-  title: string;
-  email: string;
-  phone: string;
-  location: string;
-  summary: string;
-}
-
-interface Link {
-  id: string;
-  title: string;
-  url: string;
-}
-
-interface Skill {
-  id: string;
-  name: string;
-  level: number; // 1-5
+  category: 'professional' | 'creative' | 'academic' | 'simple';
+  latex_content: string;
+  preview_url: string;
+  created_at: string;
+  is_premium: boolean;
 }
 
 export default function CreateResume() {
@@ -55,6 +43,42 @@ export default function CreateResume() {
     location: "",
     summary: ""
   });
+  
+  // Template related states
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const supabase = createClient();
+  
+  // Fetch templates on component mount
+  useEffect(() => {
+    fetchTemplates();
+  }, []);
+  
+  const fetchTemplates = async () => {
+    try {
+      setIsLoading(true);
+      
+      const { data, error } = await supabase
+        .from('templates')
+        .select('*');
+        
+      if (error) {
+        throw error;
+      }
+      
+      if (data) {
+        setTemplates(data);
+      }
+    } catch (error) {
+      console.error('Error fetching templates:', error);
+      toast.error("Failed to load templates");
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const [workExperience, setWorkExperience] = useState<ResumeSection[]>([]);
   const [education, setEducation] = useState<ResumeSection[]>([]);
@@ -91,48 +115,8 @@ export default function CreateResume() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<"work" | "education" | "project" | "skill" | "link">("work");
   
-  const handlePersonalInfoChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setPersonalInfo(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-  
-  const handleNewSectionChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setNewSection(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-  
-  const handleBulletChange = (index: number, value: string) => {
-    setNewSection(prev => {
-      const updatedBullets = [...prev.bullets];
-      updatedBullets[index] = value;
-      return {
-        ...prev,
-        bullets: updatedBullets
-      };
-    });
-  };
-  
-  const addBullet = () => {
-    setNewSection(prev => ({
-      ...prev,
-      bullets: [...prev.bullets, ""]
-    }));
-  };
-  
-  const removeBullet = (index: number) => {
-    setNewSection(prev => {
-      const updatedBullets = prev.bullets.filter((_, i) => i !== index);
-      return {
-        ...prev,
-        bullets: updatedBullets.length ? updatedBullets : [""]
-      };
-    });
+  const handlePersonalInfoChange = (updatedInfo: PersonalInfo) => {
+    setPersonalInfo(updatedInfo);
   };
   
   const openDialog = (type: "work" | "education" | "project" | "skill" | "link") => {
@@ -219,15 +203,14 @@ export default function CreateResume() {
   };
   
   const handleSaveResume = () => {
-    // Here you would implement saving the resume data
-    // For example, to localStorage or to a database
     const resumeData = {
       personalInfo,
       workExperience,
       education,
       projects,
       skills,
-      links
+      links,
+      templateId: selectedTemplate?.id || null
     };
     
     console.log("Saving resume:", resumeData);
@@ -235,7 +218,6 @@ export default function CreateResume() {
   };
   
   const handlePreviewResume = () => {
-    // Here you would implement the preview functionality
     toast.info("Preview functionality coming soon!");
   };
   
@@ -255,6 +237,13 @@ export default function CreateResume() {
     }
   };
   
+  // Template selection handler
+  const handleSelectTemplate = (template: Template) => {
+    setSelectedTemplate(template);
+    setIsTemplateDialogOpen(false);
+    toast.success(`Template "${template.name}" selected`);
+  };
+  
   return (
     <div className="flex min-h-screen bg-gray-50">
       <DashboardSidebar />
@@ -262,16 +251,57 @@ export default function CreateResume() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Create Your Resume</h1>
           <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsTemplateDialogOpen(true)} 
+              className="flex items-center gap-2"
+            >
+              <LayoutTemplate size={16} />
+              {selectedTemplate ? "Change Template" : "Select Template"}
+            </Button>
             <Button variant="outline" onClick={handlePreviewResume} className="flex items-center gap-2">
               <Eye size={16} />
               Preview
             </Button>
             <Button onClick={handleSaveResume} className="flex items-center gap-2">
               <Save size={16} />
-              Save Resume
+              Create Resume
             </Button>
           </div>
         </div>
+        
+        {selectedTemplate && (
+          <Card className="mb-4 bg-blue-50 border-blue-200">
+            <CardContent className="p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded overflow-hidden border">
+                  {selectedTemplate.preview_url ? (
+                    <img 
+                      src={selectedTemplate.preview_url} 
+                      alt={selectedTemplate.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-gray-100 flex items-center justify-center">
+                      <LayoutTemplate size={20} className="text-gray-400" />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-medium">Template: {selectedTemplate.name}</h3>
+                  <p className="text-sm text-gray-600">{selectedTemplate.category.charAt(0).toUpperCase() + selectedTemplate.category.slice(1)}</p>
+                </div>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setIsTemplateDialogOpen(true)}
+              >
+                Change
+              </Button>
+            </CardContent>
+          </Card>
+        )}
         
         <Card className="mb-6">
           <CardContent className="p-6">
@@ -285,372 +315,51 @@ export default function CreateResume() {
                 <TabsTrigger value="links">Links</TabsTrigger>
               </TabsList>
               
-              <TabsContent value="personal" className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <Label htmlFor="name">Full Name</Label>
-                    <Input 
-                      id="name" 
-                      name="name" 
-                      placeholder="John Doe" 
-                      value={personalInfo.name}
-                      onChange={handlePersonalInfoChange}
-                    />
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <Label htmlFor="title">Professional Title</Label>
-                    <Input 
-                      id="title" 
-                      name="title" 
-                      placeholder="Software Engineer" 
-                      value={personalInfo.title}
-                      onChange={handlePersonalInfoChange}
-                    />
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <Label htmlFor="email">Email</Label>
-                    <Input 
-                      id="email" 
-                      name="email" 
-                      type="email" 
-                      placeholder="john.doe@example.com" 
-                      value={personalInfo.email}
-                      onChange={handlePersonalInfoChange}
-                    />
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <Label htmlFor="phone">Phone</Label>
-                    <Input 
-                      id="phone" 
-                      name="phone" 
-                      placeholder="(123) 456-7890" 
-                      value={personalInfo.phone}
-                      onChange={handlePersonalInfoChange}
-                    />
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <Label htmlFor="location">Location</Label>
-                    <Input 
-                      id="location" 
-                      name="location" 
-                      placeholder="San Francisco, CA" 
-                      value={personalInfo.location}
-                      onChange={handlePersonalInfoChange}
-                    />
-                  </div>
-                </div>
-                
-                <div className="space-y-3 mt-6">
-                  <Label htmlFor="summary">Professional Summary</Label>
-                  <Textarea 
-                    id="summary" 
-                    name="summary" 
-                    placeholder="Write a brief summary of your professional background and key strengths..." 
-                    rows={5}
-                    value={personalInfo.summary}
-                    onChange={handlePersonalInfoChange}
-                  />
-                </div>
+              <TabsContent value="personal">
+                <PersonalInfoTab 
+                  personalInfo={personalInfo} 
+                  onChange={handlePersonalInfoChange} 
+                />
               </TabsContent>
               
-              <TabsContent value="work" className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">Work Experience</h3>
-                  <Button onClick={() => openDialog("work")} className="flex items-center gap-2">
-                    <Plus size={16} />
-                    Add Experience
-                  </Button>
-                </div>
-                
-                {workExperience.length === 0 ? (
-                  <div className="text-center py-12 border border-dashed rounded-lg">
-                    <p className="text-gray-500">No work experience added yet</p>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => openDialog("work")} 
-                      className="mt-4"
-                    >
-                      Add Your First Work Experience
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {workExperience.map((job) => (
-                      <Card key={job.id} className="relative">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="absolute top-2 right-2 text-gray-500 hover:text-red-500"
-                          onClick={() => removeItem("work", job.id)}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                        <CardContent className="p-6">
-                          <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-2">
-                            <div>
-                              <h4 className="font-semibold text-lg">{job.title}</h4>
-                              <p className="text-gray-600">{job.company}</p>
-                              <p className="text-gray-500 text-sm">{job.location}</p>
-                            </div>
-                            <div className="text-gray-500 text-sm">
-                              {job.startDate} - {job.endDate || 'Present'}
-                            </div>
-                          </div>
-                          
-                          <p className="mt-3 text-gray-700">{job.description}</p>
-                          
-                          {job.bullets.length > 0 && job.bullets[0] !== "" && (
-                            <ul className="mt-3 list-disc list-inside space-y-1">
-                              {job.bullets.map((bullet, index) => (
-                                <li key={index} className="text-gray-700">{bullet}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
+              <TabsContent value="work">
+                <WorkExperienceTab 
+                  workExperience={workExperience} 
+                  onAdd={() => openDialog("work")} 
+                  onRemove={(id) => removeItem("work", id)} 
+                />
               </TabsContent>
               
-              <TabsContent value="education" className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">Education</h3>
-                  <div className="flex justify-between items-center">
-                  <Button onClick={() => openDialog("education")} className="flex items-center gap-2">
-                    <Plus size={16} />
-                    Add Education
-                  </Button>
-                  </div>
-                </div>
-                
-                {education.length === 0 ? (
-                  <div className="text-center py-12 border border-dashed rounded-lg">
-                    <p className="text-gray-500">No education added yet</p>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => openDialog("education")} 
-                      className="mt-4"
-                    >
-                      Add Your Education
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {education.map((edu) => (
-                      <Card key={edu.id} className="relative">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="absolute top-2 right-2 text-gray-500 hover:text-red-500"
-                          onClick={() => removeItem("education", edu.id)}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                        <CardContent className="p-6">
-                          <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-2">
-                            <div>
-                              <h4 className="font-semibold text-lg">{edu.title}</h4>
-                              <p className="text-gray-600">{edu.company}</p>
-                              <p className="text-gray-500 text-sm">{edu.location}</p>
-                            </div>
-                            <div className="text-gray-500 text-sm">
-                              {edu.startDate} - {edu.endDate || 'Present'}
-                            </div>
-                          </div>
-                          
-                          <p className="mt-3 text-gray-700">{edu.description}</p>
-                          
-                          {edu.bullets.length > 0 && edu.bullets[0] !== "" && (
-                            <ul className="mt-3 list-disc list-inside space-y-1">
-                              {edu.bullets.map((bullet, index) => (
-                                <li key={index} className="text-gray-700">{bullet}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
+              <TabsContent value="education">
+                <EducationTab 
+                  education={education} 
+                  onAdd={() => openDialog("education")} 
+                  onRemove={(id) => removeItem("education", id)} 
+                />
               </TabsContent>
               
-              <TabsContent value="projects" className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">Projects</h3>
-                  <Button onClick={() => openDialog("project")} className="flex items-center gap-2">
-                    <Plus size={16} />
-                    Add Project
-                  </Button>
-                </div>
-                
-                {projects.length === 0 ? (
-                  <div className="text-center py-12 border border-dashed rounded-lg">
-                    <p className="text-gray-500">No projects added yet</p>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => openDialog("project")} 
-                      className="mt-4"
-                    >
-                      Add Your First Project
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {projects.map((project) => (
-                      <Card key={project.id} className="relative">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="absolute top-2 right-2 text-gray-500 hover:text-red-500"
-                          onClick={() => removeItem("project", project.id)}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                        <CardContent className="p-6">
-                          <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-2">
-                            <div>
-                              <h4 className="font-semibold text-lg">{project.title}</h4>
-                              {project.company && <p className="text-gray-600">{project.company}</p>}
-                            </div>
-                            <div className="text-gray-500 text-sm">
-                              {project.startDate && project.endDate ? 
-                                `${project.startDate} - ${project.endDate || 'Present'}` : ''}
-                            </div>
-                          </div>
-                          
-                          <p className="mt-3 text-gray-700">{project.description}</p>
-                          
-                          {/* Display project URL if it exists */}
-                          {project.projectUrl && (
-                            <a 
-                              href={project.projectUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer" 
-                              className="mt-2 text-blue-500 hover:underline text-sm inline-block"
-                            >
-                              View Project
-                            </a>
-                          )}
-                          
-                          {project.bullets.length > 0 && project.bullets[0] !== "" && (
-                            <ul className="mt-3 list-disc list-inside space-y-1">
-                              {project.bullets.map((bullet, index) => (
-                                <li key={index} className="text-gray-700">{bullet}</li>
-                              ))}
-                            </ul>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
+              <TabsContent value="projects">
+                <ProjectsTab 
+                  projects={projects} 
+                  onAdd={() => openDialog("project")} 
+                  onRemove={(id) => removeItem("project", id)} 
+                />
               </TabsContent>
               
-              <TabsContent value="skills" className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">Skills</h3>
-                  <Button onClick={() => openDialog("skill")} className="flex items-center gap-2">
-                    <Plus size={16} />
-                    Add Skill
-                  </Button>
-                </div>
-                
-                {skills.length === 0 ? (
-                  <div className="text-center py-12 border border-dashed rounded-lg">
-                    <p className="text-gray-500">No skills added yet</p>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => openDialog("skill")} 
-                      className="mt-4"
-                    >
-                      Add Your Skills
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {skills.map((skill) => (
-                      <Card key={skill.id} className="relative">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="absolute top-2 right-2 text-gray-500 hover:text-red-500"
-                          onClick={() => removeItem("skill", skill.id)}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-medium">{skill.name}</h4>
-                            <div className="flex">
-                              {[...Array(5)].map((_, i) => (
-                                <div 
-                                  key={i} 
-                                  className={`w-2 h-2 rounded-full mx-0.5 ${
-                                    i < skill.level ? 'bg-blue-500' : 'bg-gray-200'
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
+              <TabsContent value="skills">
+                <SkillsTab 
+                  skills={skills} 
+                  onAdd={() => openDialog("skill")} 
+                  onRemove={(id) => removeItem("skill", id)} 
+                />
               </TabsContent>
               
-              <TabsContent value="links" className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">Links</h3>
-                  <Button onClick={() => openDialog("link")} className="flex items-center gap-2">
-                    <Plus size={16} />
-                    Add Link
-                  </Button>
-                </div>
-                
-                {links.length === 0 ? (
-                  <div className="text-center py-12 border border-dashed rounded-lg">
-                    <p className="text-gray-500">No links added yet</p>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => openDialog("link")} 
-                      className="mt-4"
-                    >
-                      Add Your First Link
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {links.map((link) => (
-                      <Card key={link.id} className="relative">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="absolute top-2 right-2 text-gray-500 hover:text-red-500"
-                          onClick={() => removeItem("link", link.id)}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                        <CardContent className="p-4">
-                          <h4 className="font-medium">{link.title}</h4>
-                          <a 
-                            href={link.url} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="text-blue-500 hover:underline text-sm truncate block"
-                          >
-                            {link.url}
-                          </a>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                )}
+              <TabsContent value="links">
+                <LinksTab 
+                  links={links} 
+                  onAdd={() => openDialog("link")} 
+                  onRemove={(id) => removeItem("link", id)} 
+                />
               </TabsContent>
             </Tabs>
           </CardContent>
@@ -678,259 +387,72 @@ export default function CreateResume() {
       </main>
       
       {/* Dialog for adding new entries */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[550px]">
+      <AddSectionDialog
+        isOpen={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        dialogType={dialogType}
+        newSection={newSection}
+        setNewSection={setNewSection}
+        newSkill={newSkill}
+        setNewSkill={setNewSkill}
+        newLink={newLink}
+        setNewLink={setNewLink}
+        onAdd={handleAddSection}
+      />
+      
+      {/* Template Selection Dialog */}
+      <Dialog open={isTemplateDialogOpen} onOpenChange={setIsTemplateDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {dialogType === "work" && "Add Work Experience"}
-              {dialogType === "education" && "Add Education"}
-              {dialogType === "project" && "Add Project"}
-              {dialogType === "skill" && "Add Skill"}
-              {dialogType === "link" && "Add Link"}
-            </DialogTitle>
-            <DialogDescription>
-              {dialogType === "work" && "Add details about your work experience"}
-              {dialogType === "education" && "Add details about your education"}
-              {dialogType === "project" && "Add details about your project"}
-              {dialogType === "skill" && "Add a skill and proficiency level"}
-              {dialogType === "link" && "Add a link to your portfolio, social media, etc."}
-            </DialogDescription>
+            <DialogTitle>Select a Template</DialogTitle>
           </DialogHeader>
           
-          {/* Work, Education, Project Form */}
-          {(dialogType === "work" || dialogType === "education" || dialogType === "project") && (
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="title" className="text-right">
-                  {dialogType === "work" ? "Job Title" : 
-                   dialogType === "education" ? "Degree/Certificate" : "Project Title"}
-                </Label>
-                <Input
-                  id="title"
-                  name="title"
-                  className="col-span-3"
-                  value={newSection.title}
-                  onChange={handleNewSectionChange}
-                  placeholder={dialogType === "work" ? "Software Engineer" : 
-                              dialogType === "education" ? "Bachelor of Science" : "E-commerce Website"}
-                />
-              </div>
-              
-              {/* Add Project URL field only for projects */}
-              {dialogType === "project" && (
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="projectUrl" className="text-right">
-                    Project URL
-                  </Label>
-                  <Input
-                    id="projectUrl"
-                    name="projectUrl"
-                    type="url"
-                    className="col-span-3"
-                    value={newSection.projectUrl || ""}
-                    onChange={handleNewSectionChange}
-                    placeholder="https://github.com/username/project"
-                  />
-                </div>
-              )}
-              
-              {(dialogType === "work" || dialogType === "education") && (
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="company" className="text-right">
-                    {dialogType === "work" ? "Company" : "Institution"}
-                  </Label>
-                  <Input
-                    id="company"
-                    name="company"
-                    className="col-span-3"
-                    value={newSection.company}
-                    onChange={handleNewSectionChange}
-                    placeholder={dialogType === "work" ? "Google" : "Stanford University"}
-                  />
-                </div>
-              )}
-              
-              {(dialogType === "work" || dialogType === "education") && (
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="location" className="text-right">
-                    Location
-                  </Label>
-                  <Input
-                    id="location"
-                    name="location"
-                    className="col-span-3"
-                    value={newSection.location}
-                    onChange={handleNewSectionChange}
-                    placeholder="San Francisco, CA"
-                  />
-                </div>
-              )}
-              
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="startDate" className="text-right">
-                  Start Date
-                </Label>
-                <Input
-                  id="startDate"
-                  name="startDate"
-                  type="month"
-                  className="col-span-3"
-                  value={newSection.startDate}
-                  onChange={handleNewSectionChange}
-                />
-              </div>
-              
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="endDate" className="text-right">
-                  End Date
-                </Label>
-                <Input
-                  id="endDate"
-                  name="endDate"
-                  type="month"
-                  className="col-span-3"
-                  value={newSection.endDate}
-                  onChange={handleNewSectionChange}
-                  placeholder="Leave blank if current"
-                />
-              </div>
-              
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="description" className="text-right">
-                  Description
-                </Label>
-                <Textarea
-                  id="description"
-                  name="description"
-                  className="col-span-3"
-                  value={newSection.description}
-                  onChange={handleNewSectionChange}
-                  placeholder="Brief description..."
-                />
-              </div>
-              
-              <div className="grid grid-cols-4 gap-4">
-                <Label className="text-right mt-2">
-                  Key Points
-                </Label>
-                <div className="col-span-3 space-y-2">
-                  {newSection.bullets.map((bullet, index) => (
-                    <div key={index} className="flex gap-2">
-                      <Input
-                        value={bullet}
-                        onChange={(e) => handleBulletChange(index, e.target.value)}
-                        placeholder={`Bullet point ${index + 1}`}
+          {isLoading ? (
+            <div className="flex justify-center items-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+              {templates.map((template) => (
+                <div 
+                  key={template.id}
+                  className={`border rounded-lg overflow-hidden transition-all cursor-pointer hover:shadow-md ${
+                    selectedTemplate?.id === template.id ? 'ring-2 ring-blue-500 shadow-md' : ''
+                  }`}
+                  onClick={() => handleSelectTemplate(template)}
+                >
+                  <div className="relative aspect-[3/4] bg-gray-100">
+                    {template.preview_url ? (
+                      <img 
+                        src={template.preview_url} 
+                        alt={template.name}
+                        className="absolute inset-0 w-full h-full object-cover"
                       />
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        type="button"
-                        onClick={() => removeBullet(index)}
-                        disabled={newSection.bullets.length === 1}
-                      >
-                        <Trash2 size={16} />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button 
-                    variant="outline"
-                    type="button"
-                    onClick={addBullet}
-                    className="w-full mt-2"
-                    >
-                    Add Bullet Point
-                    </Button>
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                        {template.name} Preview
+                      </div>
+                    )}
+                    
+                    {template.is_premium && (
+                      <div className="absolute top-2 right-2 bg-amber-500 text-white text-xs px-2 py-1 rounded">
+                        PREMIUM
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="p-3">
+                    <h3 className="font-medium">{template.name}</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {template.category.charAt(0).toUpperCase() + template.category.slice(1)}
+                    </p>
+                  </div>
                 </div>
-                </div>
+              ))}
             </div>
-            )}
-            
-            {/* Skill Form */}
-            {dialogType === "skill" && (
-            <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="skillName" className="text-right">
-                    Skill Name
-                </Label>
-                <Input
-                    id="skillName"
-                    className="col-span-3"
-                    value={newSkill.name}
-                    onChange={(e) => setNewSkill(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="JavaScript, Project Management, etc."
-                />
-                </div>
-                
-                <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="skillLevel" className="text-right">
-                    Proficiency Level
-                </Label>
-                <div className="col-span-3">
-                    <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-500">Beginner</span>
-                    <div className="flex-1 flex items-center">
-                        {[1, 2, 3, 4, 5].map((level) => (
-                        <button
-                            key={level}
-                            type="button"
-                            className={`w-8 h-8 rounded-full mx-1 flex items-center justify-center ${
-                            level <= newSkill.level ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
-                            }`}
-                            onClick={() => setNewSkill(prev => ({ ...prev, level }))}
-                        >
-                            {level}
-                        </button>
-                        ))}
-                    </div>
-                    <span className="text-sm text-gray-500">Expert</span>
-                    </div>
-                </div>
-                </div>
-            </div>
-            )}
-            
-            {/* Link Form */}
-            {dialogType === "link" && (
-            <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="linkTitle" className="text-right">
-                    Title
-                </Label>
-                <Input
-                    id="linkTitle"
-                    className="col-span-3"
-                    value={newLink.title}
-                    onChange={(e) => setNewLink(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder="LinkedIn, GitHub, Portfolio, etc."
-                />
-                </div>
-                
-                <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="linkUrl" className="text-right">
-                    URL
-                </Label>
-                <Input
-                    id="linkUrl"
-                    type="url"
-                    className="col-span-3"
-                    value={newLink.url}
-                    onChange={(e) => setNewLink(prev => ({ ...prev, url: e.target.value }))}
-                    placeholder="https://example.com"
-                />
-                </div>
-            </div>
-            )}
-            
-            <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                Cancel
-            </Button>
-            <Button onClick={handleAddSection}>
-                Add
-            </Button>
-            </DialogFooter>
+          )}
         </DialogContent>
-        </Dialog>
+      </Dialog>
     </div>
-    );
+  );
 }
