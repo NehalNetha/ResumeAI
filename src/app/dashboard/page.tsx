@@ -32,8 +32,9 @@ interface Template {
 }
 
 export default function Dashboard() {
+  // Replace the single resume selection with an array
   const [uploadedResumes, setUploadedResumes] = useState<Resume[]>([]);
-  const [selectedResume, setSelectedResume] = useState<Resume | null>(null);
+  const [selectedResumes, setSelectedResumes] = useState<Resume[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -170,7 +171,7 @@ export default function Dashboard() {
       
       setUploadedResumes(prev => [...prev, ...newResumes]);
       if (newResumes.length > 0) {
-        setSelectedResume(newResumes[0]);
+        setSelectedResumes(prev => [...prev, newResumes[0]]);
       }
       toast("Success: Resume(s) uploaded successfully");
     } catch (error) {
@@ -182,7 +183,14 @@ export default function Dashboard() {
   };
   
   const selectResume = (resume: Resume) => {
-    setSelectedResume(resume);
+    // Check if the resume is already selected
+    if (selectedResumes.some(r => r.id === resume.id)) {
+      // If already selected, remove it
+      setSelectedResumes(prev => prev.filter(r => r.id !== resume.id));
+    } else {
+      // If not selected, add it
+      setSelectedResumes(prev => [...prev, resume]);
+    }
   };
   
   const selectTemplate = (template: Template) => {
@@ -191,8 +199,8 @@ export default function Dashboard() {
   };
 
   const handleGenerateResume = async () => {
-    if (!selectedTemplate || !selectedResume || !jobDescription.trim()) {
-      toast("Please select a template, a resume, and provide a job description");
+    if (!selectedTemplate || selectedResumes.length === 0 || !jobDescription.trim()) {
+      toast("Please select a template, at least one resume, and provide a job description");
       return;
     }
     
@@ -218,50 +226,42 @@ export default function Dashboard() {
         }
       }
       
-      // Ensure the resume URL is still valid (they expire after 24 hours)
-      let resumeWithValidUrl = selectedResume;
-      if (selectedResume.url) {
-        try {
-          // Check if URL is still valid with a HEAD request
-          const urlCheck = await fetch(selectedResume.url, { method: 'HEAD' });
-          if (!urlCheck.ok) {
-            // URL expired, get a new one
-            console.log('Resume URL expired, generating new signed URL');
-            const { data: urlData } = await supabase
-              .storage
-              .from('resumes')
-              .createSignedUrl(selectedResume.path || '', 60 * 60 * 24);
-              
-            if (urlData?.signedUrl) {
-              resumeWithValidUrl = {
-                ...selectedResume,
-                url: urlData.signedUrl
-              };
+      // Ensure all resume URLs are still valid (they expire after 24 hours)
+      const validResumes = await Promise.all(
+        selectedResumes.map(async (resume) => {
+          if (!resume.url) return resume;
+          
+          try {
+            // Check if URL is still valid with a HEAD request
+            const urlCheck = await fetch(resume.url, { method: 'HEAD' });
+            if (!urlCheck.ok) {
+              // URL expired, get a new one
+              console.log(`Resume URL for ${resume.name} expired, generating new signed URL`);
+              const { data: urlData } = await supabase
+                .storage
+                .from('resumes')
+                .createSignedUrl(resume.path || '', 60 * 60 * 24);
+                
+              if (urlData?.signedUrl) {
+                return {
+                  ...resume,
+                  url: urlData.signedUrl
+                };
+              }
             }
+            return resume;
+          } catch (error) {
+            console.error(`Error checking resume URL for ${resume.name}:`, error);
+            return resume;
           }
-        } catch (error) {
-          console.error('Error checking resume URL:', error);
-          // Will continue with existing URL and let the API handle any issues
-        }
-      }
-      
-      // System prompt for Gemini
-      const systemPrompt = `
-You are an expert resume tailoring assistant. Your task is to customize a LaTeX resume template 
-based on the provided resume PDF and job description. Focus on:
-1. Highlighting relevant skills and experiences that match the job requirements
-2. Reorganizing content to emphasize the most relevant qualifications
-3. Maintaining the original LaTeX structure and formatting
-4. Ensuring the output is valid LaTeX code that can be compiled
-5. Please don't add any unnecessary text, or comments in the latex, cause it's going to be used as an actualy resume.
-`;
+        })
+      );
       
       // Log what's being sent to Gemini
       console.log('Sending to Gemini API:', {
-        resumeName: resumeWithValidUrl.name,
-        resumeUrl: resumeWithValidUrl.url ? 'URL provided' : 'No URL',
+        resumeCount: validResumes.length,
+        resumeNames: validResumes.map(r => r.name),
         templateName: templateWithLatex.name,
-        templateWithLatex: templateWithLatex,
         jobDescriptionLength: jobDescription.length,
         templateContentLength: templateWithLatex.latex_content?.length || 0
       });
@@ -272,8 +272,7 @@ based on the provided resume PDF and job description. Focus on:
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          systemPrompt,
-          resume: resumeWithValidUrl,
+          resumes: validResumes, // Send all selected resumes
           template: templateWithLatex,
           jobDescription,
         }),
@@ -314,78 +313,38 @@ based on the provided resume PDF and job description. Focus on:
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-150px)]">
           {/* Left side - Job Description and Selection */}
-          <Card className="flex flex-col overflow-hidden">
-            <CardContent className="flex-1 flex flex-col p-4">
-              <div className="mb-4">
-                <Label htmlFor="job-description" className="text-lg font-medium mb-2 block">
-                  Job Description
-                </Label>
-                <Textarea
-                  id="job-description"
-                  placeholder="Paste the job description here to tailor your resume..."
-                  value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
-                  className="min-h-[200px] resize-none"
-                />
-              </div>
-              
-              <div className="flex-1 overflow-hidden">
-                <Tabs defaultValue={activeTab} onValueChange={(value) => setActiveTab(value as 'resumes' | 'templates')}>
-                  <TabsList className="w-full">
-                    <TabsTrigger value="resumes" className="flex-1">Resumes</TabsTrigger>
-                    <TabsTrigger value="templates" className="flex-1">Templates</TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="resumes" className="h-[calc(100%-40px)] overflow-y-auto">
-                    {uploadedResumes.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                        <p>No resumes uploaded yet</p>
-                        <label htmlFor="file-upload" className="cursor-pointer mt-4 inline-block">
-                          <Button variant="outline" size="sm" className="gap-2">
-                            <Upload className="h-4 w-4" />
-                            Upload Resume
-                          </Button>
-                          <input
-                            id="file-upload"
-                            type="file"
-                            className="hidden"
-                            multiple
-                            accept=".pdf,.doc,.docx"
-                            onChange={handleFileInput}
-                            disabled={isLoading}
-                          />
-                        </label>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-1 gap-2 mt-2">
-                          {uploadedResumes.map((resume) => (
-                            <div 
-                              key={resume.id.toString()}
-                              className={`border rounded p-3 cursor-pointer flex items-center ${
-                                selectedResume?.id === resume.id 
-                                  ? 'border-blue-500 bg-blue-50' 
-                                  : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                              onClick={() => selectResume(resume)}
-                            >
-                              <FileText className="h-5 w-5 mr-3 text-blue-500" />
-                              <div className="flex-1">
-                                <div className="font-medium truncate">{resume.name}</div>
-                                <div className="text-xs text-gray-500">
-                                  {resume.date} • {resume.size}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        
-                        <div className="mt-4 flex justify-center">
-                          <label htmlFor="file-upload" className="cursor-pointer">
+          <div className="flex flex-col space-y-4">
+            <Card className="flex flex-col overflow-hidden">
+              <CardContent className="flex-1 flex flex-col p-4">
+                <div className="mb-4">
+                  <Label htmlFor="job-description" className="text-lg font-medium mb-2 block">
+                    Job Description
+                  </Label>
+                  <Textarea
+                    id="job-description"
+                    placeholder="Paste the job description here to tailor your resume..."
+                    value={jobDescription}
+                    onChange={(e) => setJobDescription(e.target.value)}
+                    className="min-h-[200px] resize-none"
+                  />
+                </div>
+                
+                <div className="flex-1 overflow-hidden flex flex-col">
+                  <Tabs defaultValue={activeTab} onValueChange={(value) => setActiveTab(value as 'resumes' | 'templates')} className="flex-1 flex flex-col">
+                    <TabsList className="w-full">
+                      <TabsTrigger value="resumes" className="flex-1">Resumes</TabsTrigger>
+                      <TabsTrigger value="templates" className="flex-1">Templates</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="resumes" className="flex-1 overflow-y-auto">
+                      {uploadedResumes.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                          <p>No resumes uploaded yet</p>
+                          <label htmlFor="file-upload" className="cursor-pointer mt-4 inline-block">
                             <Button variant="outline" size="sm" className="gap-2">
                               <Upload className="h-4 w-4" />
-                              Upload New
+                              Upload Resume
                             </Button>
                             <input
                               id="file-upload"
@@ -398,64 +357,122 @@ based on the provided resume PDF and job description. Focus on:
                             />
                           </label>
                         </div>
-                      </>
-                    )}
-                  </TabsContent>
-                  
-                  <TabsContent value="templates" className="h-[calc(100%-40px)] overflow-y-auto">
-                    {templates.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <LayoutTemplate className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                        <p>No templates available</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-2 mt-2">
-                        {templates.map((template) => (
-                          <div 
-                            key={template.id}
-                            className={`border rounded p-3 cursor-pointer flex items-center ${
-                              selectedTemplate?.id === template.id 
-                                ? 'border-blue-500 bg-blue-50' 
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                            onClick={() => selectTemplate(template)}
-                          >
-                            <LayoutTemplate className="h-5 w-5 mr-3 text-blue-500" />
-                            <div className="flex-1">
-                              <div className="font-medium">{template.name}</div>
-                              <div className="text-xs text-gray-500">
-                                {template.category} • {template.is_premium ? 'Premium' : 'Free'}
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-1 gap-2 mt-2 max-h-[calc(100vh-450px)] overflow-y-auto">
+                            {uploadedResumes.map((resume) => (
+                              <div 
+                                key={resume.id.toString()}
+                                className={`border rounded p-3 cursor-pointer flex items-center ${
+                                  selectedResumes.some(r => r.id === resume.id)
+                                    ? 'border-blue-500 bg-blue-50' 
+                                    : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                                onClick={() => selectResume(resume)}
+                              >
+                                <div className="mr-3">
+                                  <div className={`w-5 h-5 rounded border flex items-center justify-center ${
+                                    selectedResumes.some(r => r.id === resume.id)
+                                      ? 'bg-blue-500 border-blue-500' 
+                                      : 'border-gray-300'
+                                  }`}>
+                                    {selectedResumes.some(r => r.id === resume.id) && (
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                </div>
+                                <FileText className="h-5 w-5 mr-3 text-blue-500" />
+                                <div className="flex-1">
+                                  <div className="font-medium truncate">{resume.name}</div>
+                                  <div className="text-xs text-gray-500">
+                                    {resume.date} • {resume.size}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          
+                          <div className="mt-4 flex justify-between items-center">
+                            <div className="text-sm text-gray-500">
+                              {selectedResumes.length} resume(s) selected
+                            </div>
+                            <label htmlFor="file-upload" className="cursor-pointer">
+                              <Button variant="outline" size="sm" className="gap-2">
+                                <Upload className="h-4 w-4" />
+                                Upload New
+                              </Button>
+                              <input
+                                id="file-upload"
+                                type="file"
+                                className="hidden"
+                                multiple
+                                accept=".pdf,.doc,.docx"
+                                onChange={handleFileInput}
+                                disabled={isLoading}
+                              />
+                            </label>
+                          </div>
+                        </>
+                      )}
+                    </TabsContent>
+                    
+                    <TabsContent value="templates" className="flex-1 overflow-y-auto">
+                      {templates.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <LayoutTemplate className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                          <p>No templates available</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-2 mt-2 max-h-[calc(100vh-450px)] overflow-y-auto">
+                          {templates.map((template) => (
+                            <div 
+                              key={template.id}
+                              className={`border rounded p-3 cursor-pointer flex items-center ${
+                                selectedTemplate?.id === template.id 
+                                  ? 'border-blue-500 bg-blue-50' 
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                              onClick={() => selectTemplate(template)}
+                            >
+                              <LayoutTemplate className="h-5 w-5 mr-3 text-blue-500" />
+                              <div className="flex-1">
+                                <div className="font-medium">{template.name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {template.category} • {template.is_premium ? 'Premium' : 'Free'}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </TabsContent>
-                </Tabs>
-              </div>
-              
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <Button 
-                  onClick={handleGenerateResume} 
-                  disabled={isGenerating || !selectedTemplate || !selectedResume || !jobDescription.trim()}
-                  className="w-full"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Wand2 className="mr-2 h-4 w-4" />
-                      Generate Customized Resume
-                    </>
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Generate button moved outside the card */}
+            <Button 
+              onClick={handleGenerateResume} 
+              disabled={isGenerating || !selectedTemplate || selectedResumes.length === 0 || !jobDescription.trim()}
+              className="w-full py-6  mb-11"
+              size="lg"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="mr-2 h-5 w-5" />
+                  Generate Customized Resume
+                </>
+              )}
+            </Button>
+          </div>
           
           {/* Right side - Preview and Download */}
           <Card className="flex flex-col overflow-hidden">
@@ -519,7 +536,7 @@ based on the provided resume PDF and job description. Focus on:
                     <div>
                       <p className="text-sm font-medium">Resume customized for job description</p>
                       <p className="text-xs text-gray-500">
-                        Using {selectedResume?.name} and {selectedTemplate?.name} template
+                        Using {selectedResumes.length} resume(s) and {selectedTemplate?.name} template
                       </p>
                     </div>
                     <Button 
