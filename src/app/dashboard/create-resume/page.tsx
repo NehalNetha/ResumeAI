@@ -8,6 +8,7 @@ import DashboardSidebar from '@/components/DashboardSidebar';
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { createClient } from '@/utils/supabase/client';
+import { useRouter } from 'next/navigation';
 
 // Import our new components
 import PersonalInfoTab from '@/components/resume-builder/PersonalInfoTab';
@@ -34,6 +35,7 @@ interface Template {
 }
 
 export default function CreateResume() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("personal");
   const [personalInfo, setPersonalInfo] = useState<PersonalInfo>({
     name: "",
@@ -49,13 +51,82 @@ export default function CreateResume() {
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [resumeId, setResumeId] = useState<string | null>(null);
   
   const supabase = createClient();
   
-  // Fetch templates on component mount
+  // Fetch templates and user info on component mount
   useEffect(() => {
     fetchTemplates();
+    fetchUserInfo();
   }, []);
+  
+  // Add a new useEffect to fetch resume data when userId is available
+  useEffect(() => {
+    if (userId) {
+      fetchResumeData();
+    }
+  }, [userId]);
+  
+  const fetchUserInfo = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+      }
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    }
+  };
+  
+  // Add a new function to fetch resume data
+  const fetchResumeData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Get the most recent resume for this user
+      const { data, error } = await supabase
+        .from('resume_info')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+        
+      if (error) {
+        throw error;
+      }
+      
+      if (data && data.length > 0) {
+        const resume = data[0];
+        setResumeId(resume.id);
+        
+        // Set all the resume data
+        if (resume.personal_info) setPersonalInfo(resume.personal_info);
+        if (resume.work_experience) setWorkExperience(resume.work_experience);
+        if (resume.education) setEducation(resume.education);
+        if (resume.projects) setProjects(resume.projects);
+        if (resume.skills) setSkills(resume.skills);
+        if (resume.links) setLinks(resume.links);
+        
+        // Set the selected template if it exists
+        if (resume.template_id) {
+          const template = templates.find(t => t.id === resume.template_id);
+          if (template) {
+            setSelectedTemplate(template);
+          }
+        }
+        
+        toast.success("Resume data loaded successfully");
+      }
+    } catch (error) {
+      console.error('Error fetching resume data:', error);
+      toast.error("Failed to load resume data");
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const fetchTemplates = async () => {
     try {
@@ -150,71 +221,382 @@ export default function CreateResume() {
     }
   };
   
-  const handleAddSection = () => {
+  const handleAddSection = async () => {
     if (dialogType === "work") {
       if (!newSection.title || !newSection.company) {
         toast("Please fill in required fields");
         return;
       }
       setWorkExperience(prev => [...prev, newSection]);
+      
+      // Save work experience to database after adding
+      if (userId && resumeId) {
+        try {
+          const updatedWorkExperience = [...workExperience, newSection];
+          const supabase = createClient();
+          
+          const { error } = await supabase
+            .from('resume_info')
+            .update({ 
+              work_experience: updatedWorkExperience,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', resumeId)
+            .eq('user_id', userId);
+            
+          if (error) {
+            console.error("Error saving work experience:", error);
+            toast.error("Failed to save work experience to database");
+          } else {
+            toast.success("Work experience saved to database");
+          }
+        } catch (error) {
+          console.error("Error saving work experience:", error);
+          toast.error("Failed to save work experience to database");
+        }
+      }
     } else if (dialogType === "education") {
       if (!newSection.title || !newSection.company) {
         toast("Please fill in required fields");
         return;
       }
       setEducation(prev => [...prev, newSection]);
+      
+      // Save education to database after adding
+      if (userId && resumeId) {
+        try {
+          const updatedEducation = [...education, newSection];
+          const supabase = createClient();
+          
+          const { error } = await supabase
+            .from('resume_info')
+            .update({ 
+              education: updatedEducation,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', resumeId)
+            .eq('user_id', userId);
+            
+          if (error) {
+            console.error("Error saving education:", error);
+            toast.error("Failed to save education to database");
+          } else {
+            toast.success("Education saved to database");
+          }
+        } catch (error) {
+          console.error("Error saving education:", error);
+          toast.error("Failed to save education to database");
+        }
+      }
     } else if (dialogType === "project") {
       if (!newSection.title) {
         toast("Please fill in required fields");
         return;
       }
       setProjects(prev => [...prev, newSection]);
-    } else if (dialogType === "skill") {
+      
+      // Save projects to database after adding
+      if (userId && resumeId) {
+        try {
+          const updatedProjects = [...projects, newSection];
+          const supabase = createClient();
+          
+          const { error } = await supabase
+            .from('resume_info')
+            .update({ 
+              projects: updatedProjects,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', resumeId)
+            .eq('user_id', userId);
+            
+          if (error) {
+            console.error("Error saving project:", error);
+            toast.error("Failed to save project to database");
+          } else {
+            toast.success("Project saved to database");
+          }
+        } catch (error) {
+          console.error("Error saving project:", error);
+          toast.error("Failed to save project to database");
+        }
+      }
+    }  else if (dialogType === "skill") {
       if (!newSkill.name) {
         toast("Please enter a skill name");
         return;
       }
       setSkills(prev => [...prev, newSkill]);
-    } else if (dialogType === "link") {
+      
+      // Save skills to database after adding
+      if (userId && resumeId) {
+        try {
+          const updatedSkills = [...skills, newSkill];
+          const supabase = createClient();
+          
+          const { error } = await supabase
+            .from('resume_info')
+            .update({ 
+              skills: updatedSkills,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', resumeId)
+            .eq('user_id', userId);
+            
+          if (error) {
+            console.error("Error saving skill:", error);
+            toast.error("Failed to save skill to database");
+          } else {
+            toast.success("Skill saved to database");
+          }
+        } catch (error) {
+          console.error("Error saving skill:", error);
+          toast.error("Failed to save skill to database");
+        }
+      }
+    }  else if (dialogType === "link") {
       if (!newLink.title || !newLink.url) {
         toast("Please fill in all fields");
         return;
       }
       setLinks(prev => [...prev, newLink]);
+      
+      // Save links to database after adding
+      if (userId && resumeId) {
+        try {
+          const updatedLinks = [...links, newLink];
+          const supabase = createClient();
+          
+          const { error } = await supabase
+            .from('resume_info')
+            .update({ 
+              links: updatedLinks,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', resumeId)
+            .eq('user_id', userId);
+            
+          if (error) {
+            console.error("Error saving link:", error);
+            toast.error("Failed to save link to database");
+          } else {
+            toast.success("Link saved to database");
+          }
+        } catch (error) {
+          console.error("Error saving link:", error);
+          toast.error("Failed to save link to database");
+        }
+      }
     }
+  
     
     setIsDialogOpen(false);
     toast(`Added new ${dialogType} entry`);
   };
   
-  const removeItem = (type: string, id: string) => {
+  const removeItem = async (type: string, id: string) => {
     if (type === "work") {
-      setWorkExperience(prev => prev.filter(item => item.id !== id));
+      const updatedWorkExperience = workExperience.filter(item => item.id !== id);
+      setWorkExperience(updatedWorkExperience);
+      
+      // Save updated work experience to database after removing
+      if (userId && resumeId) {
+        try {
+          const supabase = createClient();
+          
+          const { error } = await supabase
+            .from('resume_info')
+            .update({ 
+              work_experience: updatedWorkExperience,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', resumeId)
+            .eq('user_id', userId);
+            
+          if (error) {
+            console.error("Error updating work experience:", error);
+            toast.error("Failed to update database");
+          }
+        } catch (error) {
+          console.error("Error updating work experience:", error);
+          toast.error("Failed to update database");
+        }
+      }
     } else if (type === "education") {
-      setEducation(prev => prev.filter(item => item.id !== id));
+      const updatedEducation = education.filter(item => item.id !== id);
+      setEducation(updatedEducation);
+      
+      // Save updated education to database after removing
+      if (userId && resumeId) {
+        try {
+          const supabase = createClient();
+          
+          const { error } = await supabase
+            .from('resume_info')
+            .update({ 
+              education: updatedEducation,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', resumeId)
+            .eq('user_id', userId);
+            
+          if (error) {
+            console.error("Error updating education:", error);
+            toast.error("Failed to update database");
+          }
+        } catch (error) {
+          console.error("Error updating education:", error);
+          toast.error("Failed to update database");
+        }
+      }
     } else if (type === "project") {
-      setProjects(prev => prev.filter(item => item.id !== id));
+      const updatedProjects = projects.filter(item => item.id !== id);
+      setProjects(updatedProjects);
+      
+      // Save updated projects to database after removing
+      if (userId && resumeId) {
+        try {
+          const supabase = createClient();
+          
+          const { error } = await supabase
+            .from('resume_info')
+            .update({ 
+              projects: updatedProjects,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', resumeId)
+            .eq('user_id', userId);
+            
+          if (error) {
+            console.error("Error updating projects:", error);
+            toast.error("Failed to update database");
+          }
+        } catch (error) {
+          console.error("Error updating projects:", error);
+          toast.error("Failed to update database");
+        }
+      }
     } else if (type === "skill") {
-      setSkills(prev => prev.filter(item => item.id !== id));
+      const updatedSkills = skills.filter(item => item.id !== id);
+      setSkills(updatedSkills);
+      
+      // Save updated skills to database after removing
+      if (userId && resumeId) {
+        try {
+          const supabase = createClient();
+          
+          const { error } = await supabase
+            .from('resume_info')
+            .update({ 
+              skills: updatedSkills,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', resumeId)
+            .eq('user_id', userId);
+            
+          if (error) {
+            console.error("Error updating skills:", error);
+            toast.error("Failed to update database");
+          }
+        } catch (error) {
+          console.error("Error updating skills:", error);
+          toast.error("Failed to update database");
+        }
+      }
     } else if (type === "link") {
-      setLinks(prev => prev.filter(item => item.id !== id));
+      const updatedLinks = links.filter(item => item.id !== id);
+      setLinks(updatedLinks);
+      
+      // Save updated links to database after removing
+      if (userId && resumeId) {
+        try {
+          const supabase = createClient();
+          
+          const { error } = await supabase
+            .from('resume_info')
+            .update({ 
+              links: updatedLinks,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', resumeId)
+            .eq('user_id', userId);
+            
+          if (error) {
+            console.error("Error updating links:", error);
+            toast.error("Failed to update database");
+          }
+        } catch (error) {
+          console.error("Error updating links:", error);
+          toast.error("Failed to update database");
+        }
+      }
     }
+  
     toast(`Removed ${type} entry`);
   };
   
-  const handleSaveResume = () => {
-    const resumeData = {
-      personalInfo,
-      workExperience,
-      education,
-      projects,
-      skills,
-      links,
-      templateId: selectedTemplate?.id || null
-    };
+  const handleSaveResume = async () => {
+    if (!userId) {
+      toast.error("You must be logged in to save a resume");
+      return;
+    }
     
-    console.log("Saving resume:", resumeData);
-    toast.success("Resume saved successfully!");
+    if (!personalInfo.name || !personalInfo.email) {
+      toast.error("Name and email are required");
+      setActiveTab("personal");
+      return;
+    }
+    
+    try {
+      setIsSaving(true);
+      
+      const resumeData = {
+        user_id: userId,
+        template_id: selectedTemplate?.id || null,
+        personal_info: personalInfo,
+        work_experience: workExperience,
+        education: education,
+        projects: projects,
+        skills: skills,
+        links: links,
+        updated_at: new Date().toISOString()
+      };
+      
+      let response;
+      
+      if (resumeId) {
+        // Update existing resume
+        response = await supabase
+          .from('resume_info')
+          .update(resumeData)
+          .eq('id', resumeId);
+      } else {
+        // Create new resume
+        response = await supabase
+          .from('resume_info')
+          .insert(resumeData)
+          .select();
+      }
+      
+      if (response.error) {
+        throw response.error;
+      }
+      
+      if (response.data && response.data[0]) {
+        setResumeId(response.data[0].id);
+      }
+      
+      toast.success(resumeId ? "Resume updated successfully!" : "Resume created successfully!");
+      
+      // Optionally redirect to the resumes list
+      // router.push('/dashboard/resumes');
+      
+    } catch (error) {
+      console.error('Error saving resume:', error);
+      toast.error("Failed to save resume");
+    } finally {
+      setIsSaving(false);
+    }
   };
   
   const handlePreviewResume = () => {
@@ -263,10 +645,12 @@ export default function CreateResume() {
               <Eye size={16} />
               Preview
             </Button>
-            <Button onClick={handleSaveResume} className="flex items-center gap-2">
-              <Save size={16} />
+            <Button variant="outline" onClick={handlePreviewResume}
+             className="flex items-center gap-2">
+              <Eye size={16} />
               Create Resume
             </Button>
+          
           </div>
         </div>
         
@@ -319,6 +703,8 @@ export default function CreateResume() {
                 <PersonalInfoTab 
                   personalInfo={personalInfo} 
                   onChange={handlePersonalInfoChange} 
+                  resumeId={resumeId}
+
                 />
               </TabsContent>
               
@@ -327,6 +713,8 @@ export default function CreateResume() {
                   workExperience={workExperience} 
                   onAdd={() => openDialog("work")} 
                   onRemove={(id) => removeItem("work", id)} 
+                  resumeId={resumeId}
+                  userId={userId}
                 />
               </TabsContent>
               
@@ -351,14 +739,18 @@ export default function CreateResume() {
                   skills={skills} 
                   onAdd={() => openDialog("skill")} 
                   onRemove={(id) => removeItem("skill", id)} 
+                  resumeId={resumeId}
+                  userId={userId}
                 />
               </TabsContent>
-              
+                          
               <TabsContent value="links">
                 <LinksTab 
                   links={links} 
                   onAdd={() => openDialog("link")} 
                   onRemove={(id) => removeItem("link", id)} 
+                  resumeId={resumeId}
+                  userId={userId}
                 />
               </TabsContent>
             </Tabs>

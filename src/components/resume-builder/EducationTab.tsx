@@ -1,24 +1,97 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Save } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import { ResumeSection } from '@/types/resume';
+import { createClient } from '@/utils/supabase/client';
+import { toast } from "sonner";
 
 interface EducationTabProps {
   education: ResumeSection[];
   onAdd: () => void;
   onRemove: (id: string) => void;
+  resumeId?: string | null;
+  userId?: string | null;
 }
 
-export default function EducationTab({ education, onAdd, onRemove }: EducationTabProps) {
+export default function EducationTab({ 
+  education, 
+  onAdd, 
+  onRemove,
+  resumeId,
+  userId
+}: EducationTabProps) {
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSaveEducation = async () => {
+    if (!userId) {
+      toast.error("You must be logged in to save education");
+      return;
+    }
+
+    if (!resumeId) {
+      toast.error("Please save your personal information first");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const supabase = createClient();
+
+      // Update the education field in the resume_info table
+      const { error } = await supabase
+        .from('resume_info')
+        .update({ 
+          education: education,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', resumeId)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error("Error saving education:", error);
+        throw error;
+      }
+
+      toast.success("Education saved successfully");
+    } catch (error: any) {
+      console.error('Error saving education:', error.message || error);
+      toast.error("Failed to save education");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-medium">Education</h3>
-        <Button onClick={onAdd} className="flex items-center gap-2">
-          <Plus size={16} />
-          Add Education
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={onAdd} className="flex items-center gap-2">
+            <Plus size={16} />
+            Add Education
+          </Button>
+          {education.length > 0 && (
+            <Button 
+              onClick={handleSaveEducation} 
+              variant="outline"
+              className="flex items-center gap-2"
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full mr-2" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={16} />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </div>
       
       {education.length === 0 ? (

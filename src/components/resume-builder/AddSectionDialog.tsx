@@ -262,7 +262,7 @@ export default function AddSectionDialog({
             
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="skillLevel" className="text-right">
-                Proficiency Level
+                Proficiency
               </Label>
               <div className="col-span-3">
                 <div className="flex items-center space-x-2">

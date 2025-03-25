@@ -1,24 +1,97 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Save } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import { ResumeSection } from '@/types/resume';
+import { createClient } from '@/utils/supabase/client';
+import { toast } from "sonner";
 
 interface WorkExperienceTabProps {
   workExperience: ResumeSection[];
   onAdd: () => void;
   onRemove: (id: string) => void;
+  resumeId?: string | null;
+  userId?: string | null;
 }
 
-export default function WorkExperienceTab({ workExperience, onAdd, onRemove }: WorkExperienceTabProps) {
+export default function WorkExperienceTab({ 
+  workExperience, 
+  onAdd, 
+  onRemove, 
+  resumeId,
+  userId 
+}: WorkExperienceTabProps) {
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSaveWorkExperience = async () => {
+    if (!userId) {
+      toast.error("You must be logged in to save work experience");
+      return;
+    }
+
+    if (!resumeId) {
+      toast.error("Please save your personal information first");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const supabase = createClient();
+
+      // Update the work_experience field in the resume_info table
+      const { error } = await supabase
+        .from('resume_info')
+        .update({ 
+          work_experience: workExperience,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', resumeId)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error("Error saving work experience:", error);
+        throw error;
+      }
+
+      toast.success("Work experience saved successfully");
+    } catch (error: any) {
+      console.error('Error saving work experience:', error.message || error);
+      toast.error("Failed to save work experience");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-medium">Work Experience</h3>
-        <Button onClick={onAdd} className="flex items-center gap-2">
-          <Plus size={16} />
-          Add Experience
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={onAdd} className="flex items-center gap-2">
+            <Plus size={16} />
+            Add Experience
+          </Button>
+          {workExperience.length > 0 && (
+            <Button 
+              onClick={handleSaveWorkExperience} 
+              variant="outline"
+              className="flex items-center gap-2"
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <>
+                  <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full mr-2" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={16} />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </div>
       
       {workExperience.length === 0 ? (
