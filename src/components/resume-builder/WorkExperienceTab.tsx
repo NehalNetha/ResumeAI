@@ -71,26 +71,7 @@ export default function WorkExperienceTab({
             <Plus size={16} />
             Add Experience
           </Button>
-          {workExperience.length > 0 && (
-            <Button 
-              onClick={handleSaveWorkExperience} 
-              variant="outline"
-              className="flex items-center gap-2"
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <>
-                  <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full mr-2" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save size={16} />
-                  Save Changes
-                </>
-              )}
-            </Button>
-          )}
+         
         </div>
       </div>
       

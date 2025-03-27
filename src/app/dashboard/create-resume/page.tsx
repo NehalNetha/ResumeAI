@@ -32,7 +32,13 @@ export default function CreateResume() {
   });
   
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  // ... existing imports ...
+
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(() => {
+    const savedTemplate = sessionStorage.getItem('selectedTemplate');
+    return savedTemplate ? JSON.parse(savedTemplate) : null;
+  });
+
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -567,13 +573,7 @@ export default function CreateResume() {
                 userId={userId}
               />
             </Card>
-            <Button 
-              onClick={handleGenerateResume} 
-              disabled={isGenerating || !selectedTemplate}
-              className="w-full py-6 text-lg"
-            >
-              {isGenerating ? "Generating..." : "Generate Resume"}
-            </Button>
+         
           </div>
 
           {/* Preview Section - Only when generating or generated */}
@@ -664,6 +664,8 @@ export default function CreateResume() {
         isLoading={isLoading}
         onSelectTemplate={(template) => {
           setSelectedTemplate(template as Template);
+          // Save to session storage when template is selected
+          sessionStorage.setItem('selectedTemplate', JSON.stringify(template));
           setIsTemplateDialogOpen(false);
           toast.success(`Template "${template.name}" selected`);
         }}

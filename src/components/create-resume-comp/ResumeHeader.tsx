@@ -40,15 +40,7 @@ export default function ResumeHeader({
             <LayoutTemplate size={16} />
             {selectedTemplate ? "Change Template" : "Select Template"}
           </Button>
-          <Button 
-            variant="outline" 
-            onClick={handlePreviewResume} 
-            className="flex items-center gap-2"
-            disabled={isGenerating}
-          >
-            <Eye size={16} />
-            Preview
-          </Button>
+        
           <Button 
             variant="default" 
             onClick={handleGenerateResume} 

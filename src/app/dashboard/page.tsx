@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import DashboardSidebar from '@/components/DashboardSidebar';
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Wand2, Loader2, LayoutTemplate ,  Eye, Code} from 'lucide-react';
+import { Upload, FileText, Wand2, Loader2, LayoutTemplate ,  Eye, Code, Clipboard, ClipboardCheck} from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from "sonner";
@@ -43,7 +43,9 @@ export default function Dashboard() {
   const [generatedLatex, setGeneratedLatex] = useState('');
   const [activeTab, setActiveTab] = useState<'resumes' | 'templates'>('resumes');
   const [previewMode, setPreviewMode] = useState<'raw' | 'preview'>('raw');
-  
+  const [chatQuestion, setChatQuestion] = useState('');
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const [isCopied, setIsCopied] = useState(false); // New state for copy feedback
   const supabase = createClient();
   
   useEffect(() => {
@@ -181,6 +183,51 @@ export default function Dashboard() {
       setIsLoading(false);
     }
   };
+
+
+const handleChatSubmit = async () => {
+  if (!generatedLatex || !chatQuestion.trim()) {
+    toast("Please generate a resume and enter a question");
+    return;
+  }
+  
+  setIsChatLoading(true);
+  
+  try {
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        latex: generatedLatex,
+        question: chatQuestion,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to process chat request');
+    }
+    
+    const data = await response.json();
+    
+    // Update the LaTeX with the modified version
+    setGeneratedLatex(data.modifiedLatex);
+    
+    // Clear the chat input
+    setChatQuestion('');
+    
+    toast.success("Resume updated based on your request");
+    
+  } catch (error) {
+    console.error('Error processing chat:', error);
+    toast.error(error instanceof Error ? error.message : "Failed to process your request");
+  } finally {
+    setIsChatLoading(false);
+  }
+};
+
   
   const selectResume = (resume: Resume) => {
     // Check if the resume is already selected
@@ -303,6 +350,20 @@ export default function Dashboard() {
     }
   };
 
+  const handleCopyLatex = () => {
+    if (generatedLatex) {
+      navigator.clipboard.writeText(generatedLatex).then(() => {
+        setIsCopied(true);
+        toast.success("LaTeX copied to clipboard!");
+        setTimeout(() => setIsCopied(false), 2000); // Reset after 2 seconds
+      }).catch(err => {
+        console.error('Failed to copy LaTeX:', err);
+        toast.error("Failed to copy LaTeX");
+      });
+    }
+  };
+  
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       <DashboardSidebar />
@@ -311,7 +372,8 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold">Resume Builder</h1>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[calc(100vh-150px)]">
+        {/* Change the grid layout to be more responsive for mobile */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-auto lg:h-[calc(100vh-150px)]">
           {/* Left side - Job Description and Selection */}
           <div className="flex flex-col space-y-4">
             <Card className="flex flex-col overflow-hidden">
@@ -325,7 +387,7 @@ export default function Dashboard() {
                     placeholder="Paste the job description here to tailor your resume..."
                     value={jobDescription}
                     onChange={(e) => setJobDescription(e.target.value)}
-                    className="min-h-[200px] resize-none"
+                    className="min-h-[150px] lg:min-h-[200px] resize-none"
                   />
                 </div>
                 
@@ -511,14 +573,33 @@ export default function Dashboard() {
                       </TabsTrigger>
                     </TabsList>
                     
-                    <TabsContent value="raw" className="h-full">
-                      <div className="h-full overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+                    <TabsContent value="raw" className="h-full relative"> {/* Add relative positioning */}
+                      {/* Add the copy button here */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCopyLatex}
+                        className="absolute top-0 right-8 z-10 gap-1" // Position the button
+                      >
+                        {isCopied ? (
+                          <>
+                            <ClipboardCheck />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                           <Clipboard />
+                            Copy
+                          </>
+                        )}
+                      </Button>
+                      <div className="h-full overflow-y-auto p-4 pt-10" style={{ maxHeight: 'calc(100vh - 300px)' }}> {/* Add padding-top */}
                         <pre className="text-xs whitespace-pre-wrap font-mono">
                           {generatedLatex}
                         </pre>
                       </div>
                     </TabsContent>
-                    
+
                     <TabsContent value="preview" className="h-full">
                       <div className="h-full overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 300px)' }}>
                         <div className="flex items-center justify-center h-full">
@@ -530,28 +611,43 @@ export default function Dashboard() {
                 </div>
               )}
               
-              {generatedLatex && (
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="text-sm font-medium">Resume customized for job description</p>
-                      <p className="text-xs text-gray-500">
-                        Using {selectedResumes.length} resume(s) and {selectedTemplate?.name} template
-                      </p>
-                    </div>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        // Reset the generated content
-                        setGeneratedLatex('');
-                      }}
-                    >
-                      Generate New
-                    </Button>
-                  </div>
+             
+              
+              {/* Chat box UI */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h3 className="text-sm font-medium mb-2">Resume Assistant</h3>
+                
+                <div className="flex items-center">
+                  <Textarea 
+                    placeholder="Ask a question about your resume..." 
+                    className="flex-1 resize-none h-10 py-2"
+                    value={chatQuestion}
+                    onChange={(e) => setChatQuestion(e.target.value)}
+                    disabled={isChatLoading || !generatedLatex}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleChatSubmit();
+                      }
+                    }}
+                  />
+                  <Button 
+                    size="sm" 
+                    className="ml-2 h-10"
+                    onClick={handleChatSubmit}
+                    disabled={isChatLoading || !generatedLatex || !chatQuestion.trim()}
+                  >
+                    {isChatLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-send">
+                        <path d="m22 2-7 20-4-9-9-4Z"/>
+                        <path d="M22 2 11 13"/>
+                      </svg>
+                    )}
+                  </Button>
                 </div>
-              )}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -559,3 +655,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
