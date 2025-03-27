@@ -3,33 +3,25 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import DashboardSidebar from '@/components/DashboardSidebar';
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Wand2, Loader2, LayoutTemplate ,  Eye, Code, Clipboard, ClipboardCheck} from 'lucide-react';
+import { Upload, FileText, Wand2, Loader2, LayoutTemplate, Eye, Code, Clipboard, ClipboardCheck, User } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
-
-interface Resume {
-  id: number | string;
-  name: string;
-  date: string;
-  size: string;
-  path?: string;
-  url?: string;
-}
-
-interface Template {
-  id: string;
-  name: string;
-  description: string;
-  category: 'professional' | 'creative' | 'academic' | 'simple';
-  preview_url: string;
-  created_at: string;
-  is_premium: boolean;
-  latex_content?: string;
-}
+import * as diffLib from 'diff';
+import { 
+  Resume, 
+  Template, 
+  ResumeInfo, 
+  PersonalInfo, 
+  WorkExperience, 
+  Education, 
+  Project, 
+  Skill, 
+  Link 
+} from '@/types/resume';
 
 export default function Dashboard() {
   // Replace the single resume selection with an array
@@ -41,17 +33,49 @@ export default function Dashboard() {
   const [jobDescription, setJobDescription] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedLatex, setGeneratedLatex] = useState('');
-  const [activeTab, setActiveTab] = useState<'resumes' | 'templates'>('resumes');
-  const [previewMode, setPreviewMode] = useState<'raw' | 'preview'>('raw');
+  const [originalLatex, setOriginalLatex] = useState(''); // Store original LaTeX for diff
+  const [activeTab, setActiveTab] = useState<'resumes' | 'templates' | 'info'>('resumes');  const [previewMode, setPreviewMode] = useState<'raw' | 'preview'>('raw'); // Keep original tabs
   const [chatQuestion, setChatQuestion] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const [isCopied, setIsCopied] = useState(false); // New state for copy feedback
+  const [isCopied, setIsCopied] = useState(false);
+  const [diffResult, setDiffResult] = useState<diffLib.Change[]>([]);
+  const [showDiff, setShowDiff] = useState(false); 
+  const [userId, setUserId] = useState<string | null>(null);
+  const [resumeInfos, setResumeInfos] = useState<ResumeInfo[]>([]);
+  const [selectedResumeInfo, setSelectedResumeInfo] = useState<ResumeInfo | null>(null);
+  // New state for selected individual components
+  const [selectedComponents, setSelectedComponents] = useState<{
+    personalInfo: PersonalInfo | null;
+    workExperiences: WorkExperience[];
+    educations: Education[];
+    projects: Project[];
+    skills: Skill[];
+    links: Link[];
+  }>({
+    personalInfo: null,
+    workExperiences: [],
+    educations: [],
+    projects: [],
+    skills: [],
+    links: []
+  });
+  // New state to toggle diff view
   const supabase = createClient();
   
   useEffect(() => {
     fetchResumes();
     fetchTemplates();
+    fetchUserId();
+
   }, []);
+  
+  // Calculate diff when original or generated LaTeX changes
+  useEffect(() => {
+    if (originalLatex && generatedLatex) {
+      const diff = diffLib.diffLines(originalLatex, generatedLatex);
+      setDiffResult(diff);
+    }
+  }, [originalLatex, generatedLatex]);
   
   const fetchResumes = async () => {
     try {
@@ -194,6 +218,9 @@ const handleChatSubmit = async () => {
   setIsChatLoading(true);
   
   try {
+    // Save the current LaTeX as original before making changes
+    setOriginalLatex(generatedLatex);
+    
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: {
@@ -214,6 +241,12 @@ const handleChatSubmit = async () => {
     
     // Update the LaTeX with the modified version
     setGeneratedLatex(data.modifiedLatex);
+    
+    // Enable diff view to show changes
+    setShowDiff(true);
+    
+    // Switch to raw tab to show the changes
+    setPreviewMode('raw');
     
     // Clear the chat input
     setChatQuestion('');
@@ -246,8 +279,8 @@ const handleChatSubmit = async () => {
   };
 
   const handleGenerateResume = async () => {
-    if (!selectedTemplate || selectedResumes.length === 0 || !jobDescription.trim()) {
-      toast("Please select a template, at least one resume, and provide a job description");
+    if (!selectedTemplate || (selectedResumes.length === 0 && !selectedResumeInfo) || !jobDescription.trim()) {
+      toast("Please select a template, at least one resume or saved information, and provide a job description");
       return;
     }
     
@@ -304,13 +337,45 @@ const handleChatSubmit = async () => {
         })
       );
       
+      // Create a customized resumeInfo with only the selected components
+      let customizedResumeInfo = null;
+      if (selectedResumeInfo) {
+        customizedResumeInfo = {
+          ...selectedResumeInfo,
+          personal_info: selectedComponents.personalInfo,
+          work_experience: selectedComponents.workExperiences.length > 0 
+            ? selectedComponents.workExperiences 
+            : selectedResumeInfo.work_experience,
+          education: selectedComponents.educations.length > 0 
+            ? selectedComponents.educations 
+            : selectedResumeInfo.education,
+          projects: selectedComponents.projects.length > 0 
+            ? selectedComponents.projects 
+            : selectedResumeInfo.projects,
+          skills: selectedComponents.skills.length > 0 
+            ? selectedComponents.skills 
+            : selectedResumeInfo.skills,
+          links: selectedComponents.links.length > 0 
+            ? selectedComponents.links 
+            : selectedResumeInfo.links
+        };
+      }
+      
       // Log what's being sent to Gemini
       console.log('Sending to Gemini API:', {
         resumeCount: validResumes.length,
         resumeNames: validResumes.map(r => r.name),
         templateName: templateWithLatex.name,
         jobDescriptionLength: jobDescription.length,
-        templateContentLength: templateWithLatex.latex_content?.length || 0
+        templateContentLength: templateWithLatex.latex_content?.length || 0,
+        hasResumeInfo: !!customizedResumeInfo,
+        selectedComponents: {
+          workExperiences: selectedComponents.workExperiences.length,
+          educations: selectedComponents.educations.length,
+          projects: selectedComponents.projects.length,
+          skills: selectedComponents.skills.length,
+          links: selectedComponents.links.length
+        }
       });
       
       const response = await fetch('/api/gemini', {
@@ -322,6 +387,7 @@ const handleChatSubmit = async () => {
           resumes: validResumes, // Send all selected resumes
           template: templateWithLatex,
           jobDescription,
+          resumeInfo: customizedResumeInfo // Include the customized resume info
         }),
       });
       
@@ -364,6 +430,195 @@ const handleChatSubmit = async () => {
   };
   
 
+  const fetchUserId = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        fetchResumeInfos(user.id);
+      }
+    } catch (error) {
+      console.error('Error fetching user:', error);
+    }
+  };
+  
+  // Fetch resume information from database
+  const fetchResumeInfos = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('resume_info')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false });
+        
+      if (error) throw error;
+      
+      if (data) {
+        setResumeInfos(data as ResumeInfo[]);
+      }
+    } catch (error) {
+      console.error('Error fetching resume information:', error);
+      toast.error("Failed to load resume information");
+    }
+  };
+
+  const renderDiff = () => {
+    return (
+      <div className="font-mono text-xs whitespace-pre-wrap">
+        {diffResult.map((part, index) => {
+          // Added lines are green, removed lines are red, unchanged are normal
+          const color = part.added ? 'bg-green-100 text-green-800' : 
+                       part.removed ? 'bg-red-100 text-red-800' : '';
+          
+          // Add line prefix to indicate added/removed
+          const lines = part.value.split('\n').filter(line => line.length > 0);
+          
+          return (
+            <div key={index} className={`${color}`}>
+              {lines.map((line, lineIndex) => (
+                <div key={`${index}-${lineIndex}`} className="py-1">
+                  <span className="mr-2 inline-block w-4 text-gray-500">
+                    {part.added ? '+' : part.removed ? '-' : ' '}
+                  </span>
+                  {line}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderRawLatex = () => {
+    if (!showDiff || !diffResult.length) {
+      return (
+        <pre className="text-xs whitespace-pre-wrap font-mono">
+          {generatedLatex}
+        </pre>
+      );
+    }
+    
+    return (
+      <div className="font-mono text-xs whitespace-pre-wrap">
+        {diffResult.map((part, index) => {
+          // Added lines are green, removed lines are red, unchanged are normal
+          const color = part.added ? 'bg-green-100 text-green-800' : 
+                       part.removed ? 'bg-red-100 text-red-800' : '';
+          
+          return (
+            <span key={index} className={`${color}`}>
+              {part.value}
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
+  
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  };
+  
+  // Select resume info - modified to handle individual components
+  const selectResumeInfo = (resumeInfo: ResumeInfo) => {
+    if (selectedResumeInfo?.id === resumeInfo.id) {
+      // If already selected, deselect it and clear all selected components
+      setSelectedResumeInfo(null);
+      setSelectedComponents({
+        personalInfo: null,
+        workExperiences: [],
+        educations: [],
+        projects: [],
+        skills: [],
+        links: []
+      });
+      toast(`Resume information "${resumeInfo.personal_info?.name || 'Untitled'}" deselected`);
+    } else {
+      // If not selected, select it but don't automatically select all components
+      setSelectedResumeInfo(resumeInfo);
+      // Initialize with personal info but leave other arrays empty for individual selection
+      setSelectedComponents({
+        personalInfo: resumeInfo.personal_info || null,
+        workExperiences: [],
+        educations: [],
+        projects: [],
+        skills: [],
+        links: []
+      });
+      toast(`Resume information "${resumeInfo.personal_info?.name || 'Untitled'}" selected`);
+    }
+  };
+  
+  // New functions to toggle selection of individual components
+  const toggleWorkExperience = (experience: WorkExperience) => {
+    setSelectedComponents(prev => {
+      const isSelected = prev.workExperiences.some(exp => exp.id === experience.id);
+      return {
+        ...prev,
+        workExperiences: isSelected
+          ? prev.workExperiences.filter(exp => exp.id !== experience.id)
+          : [...prev.workExperiences, experience]
+      };
+    });
+  };
+  
+  const toggleEducation = (education: Education) => {
+    setSelectedComponents(prev => {
+      const isSelected = prev.educations.some(edu => edu.id === education.id);
+      return {
+        ...prev,
+        educations: isSelected
+          ? prev.educations.filter(edu => edu.id !== education.id)
+          : [...prev.educations, education]
+      };
+    });
+  };
+  
+  const toggleProject = (project: Project) => {
+    setSelectedComponents(prev => {
+      const isSelected = prev.projects.some(proj => proj.id === project.id);
+      return {
+        ...prev,
+        projects: isSelected
+          ? prev.projects.filter(proj => proj.id !== project.id)
+          : [...prev.projects, project]
+      };
+    });
+  };
+  
+  const toggleSkill = (skill: Skill) => {
+    setSelectedComponents(prev => {
+      const isSelected = prev.skills.some(s => s.id === skill.id);
+      return {
+        ...prev,
+        skills: isSelected
+          ? prev.skills.filter(s => s.id !== skill.id)
+          : [...prev.skills, skill]
+      };
+    });
+  };
+  
+  const toggleLink = (link: Link) => {
+    setSelectedComponents(prev => {
+      const isSelected = prev.links.some(l => l.id === link.id);
+      return {
+        ...prev,
+        links: isSelected
+          ? prev.links.filter(l => l.id !== link.id)
+          : [...prev.links, link]
+      };
+    });
+  };
+  
+  
+  
+  
+  
+
   return (
     <div className="flex min-h-screen bg-gray-50">
       <DashboardSidebar />
@@ -392,10 +647,11 @@ const handleChatSubmit = async () => {
                 </div>
                 
                 <div className="flex-1 overflow-hidden flex flex-col">
-                  <Tabs defaultValue={activeTab} onValueChange={(value) => setActiveTab(value as 'resumes' | 'templates')} className="flex-1 flex flex-col">
+                  <Tabs defaultValue={activeTab} onValueChange={(value) => setActiveTab(value as 'resumes' | 'templates' | 'info')} className="flex-1 flex flex-col">
                     <TabsList className="w-full">
                       <TabsTrigger value="resumes" className="flex-1">Resumes</TabsTrigger>
                       <TabsTrigger value="templates" className="flex-1">Templates</TabsTrigger>
+                      <TabsTrigger value="info" className="flex-1">My Info</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="resumes" className="flex-1 overflow-y-auto">
@@ -510,6 +766,222 @@ const handleChatSubmit = async () => {
                         </div>
                       )}
                     </TabsContent>
+
+                    <TabsContent value="info" className="flex-1 overflow-y-auto">
+                      {!userId ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <User className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                          <p>Please sign in to access your saved information</p>
+                        </div>
+                      ) : resumeInfos.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <User className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                          <p>No saved information found</p>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="mt-4"
+                            onClick={() => window.location.href = '/dashboard/create-resume'}
+                          >
+                            Create Resume Information
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-2 mt-2 max-h-[calc(100vh-450px)] overflow-y-auto">
+                          {resumeInfos.map((info) => (
+                            <div 
+                              key={info.id}
+                              className={`border rounded p-3 cursor-pointer ${
+                                selectedResumeInfo?.id === info.id 
+                                  ? 'border-blue-500 bg-blue-50' 
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              <div 
+                                className="flex items-center"
+                                onClick={() => selectResumeInfo(info)}
+                              >
+                                <div className="mr-3">
+                                  <div className={`w-5 h-5 rounded border flex items-center justify-center ${
+                                    selectedResumeInfo?.id === info.id
+                                      ? 'bg-blue-500 border-blue-500' 
+                                      : 'border-gray-300'
+                                  }`}>
+                                    {selectedResumeInfo?.id === info.id && (
+                                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                </div>
+                                <User className="h-5 w-5 mr-3 text-blue-500" />
+                                <div className="flex-1">
+                                  <div className="font-medium">
+                                    {info.personal_info?.name || 'Untitled Resume'}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {info.personal_info?.title || 'No title'} • Updated {formatDate(info.updated_at)}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {selectedResumeInfo?.id === info.id && (
+                                <div className="mt-3 text-xs text-gray-600 border-t pt-3">
+                                  <div className="font-medium mb-2">Select specific information to include:</div>
+                                  
+                                  {/* Work Experience Selection */}
+                                  <div className="mb-3">
+                                    <div className="font-semibold mb-1">Work Experience:</div>
+                                    {info.work_experience && info.work_experience.length > 0 ? (
+                                      <div className="pl-2">
+                                        {info.work_experience.map((exp) => (
+                                          <div key={exp.id} className="flex items-center mb-1">
+                                            <div 
+                                              className={`w-4 h-4 rounded border mr-2 flex items-center justify-center cursor-pointer ${
+                                                selectedComponents.workExperiences.some(e => e.id === exp.id)
+                                                  ? 'bg-blue-500 border-blue-500' 
+                                                  : 'border-gray-300'
+                                              }`}
+                                              onClick={() => toggleWorkExperience(exp)}
+                                            >
+                                              {selectedComponents.workExperiences.some(e => e.id === exp.id) && (
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                            <span className="truncate">{exp.company} - {exp.title}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-gray-400 pl-2">No work experience</div>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Education Selection */}
+                                  <div className="mb-3">
+                                    <div className="font-semibold mb-1">Education:</div>
+                                    {info.education && info.education.length > 0 ? (
+                                      <div className="pl-2">
+                                        {info.education.map((edu) => (
+                                          <div key={edu.id} className="flex items-center mb-1">
+                                            <div 
+                                              className={`w-4 h-4 rounded border mr-2 flex items-center justify-center cursor-pointer ${
+                                                selectedComponents.educations.some(e => e.id === edu.id)
+                                                  ? 'bg-blue-500 border-blue-500' 
+                                                  : 'border-gray-300'
+                                              }`}
+                                              onClick={() => toggleEducation(edu)}
+                                            >
+                                              {selectedComponents.educations.some(e => e.id === edu.id) && (
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                            <span className="truncate">{edu.title} - {edu.company}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-gray-400 pl-2">No education</div>
+                                    )}
+                                  </div>
+                                  
+                                  
+                                  {/* Projects Selection */}
+                                  <div className="mb-3">
+                                    <div className="font-semibold mb-1">Projects:</div>
+                                    {info.projects && info.projects.length > 0 ? (
+                                      <div className="pl-2">
+                                        {info.projects.map((project) => (
+                                          <div key={project.id} className="flex items-center mb-1">
+                                            <div 
+                                              className={`w-4 h-4 rounded border mr-2 flex items-center justify-center cursor-pointer ${
+                                                selectedComponents.projects.some(p => p.id === project.id)
+                                                  ? 'bg-blue-500 border-blue-500' 
+                                                  : 'border-gray-300'
+                                              }`}
+                                              onClick={() => toggleProject(project)}
+                                            >
+                                              {selectedComponents.projects.some(p => p.id === project.id) && (
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                            <span className="truncate">{project.title}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-gray-400 pl-2">No projects</div>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Skills Selection */}
+                                  <div className="mb-3">
+                                    <div className="font-semibold mb-1">Skills:</div>
+                                    {info.skills && info.skills.length > 0 ? (
+                                      <div className="pl-2 flex flex-wrap gap-1">
+                                        {info.skills.map((skill) => (
+                                          <div 
+                                            key={skill.id}
+                                            className={`px-2 py-1 rounded-full text-xs cursor-pointer ${
+                                              selectedComponents.skills.some(s => s.id === skill.id)
+                                                ? 'bg-blue-100 text-blue-800 border border-blue-300' 
+                                                : 'bg-gray-100 text-gray-800 border border-gray-200'
+                                            }`}
+                                            onClick={() => toggleSkill(skill)}
+                                          >
+                                            {skill.name}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-gray-400 pl-2">No skills</div>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Links Selection */}
+                                  <div className="mb-1">
+                                    <div className="font-semibold mb-1">Links:</div>
+                                    {info.links && info.links.length > 0 ? (
+                                      <div className="pl-2">
+                                        {info.links.map((link) => (
+                                          <div key={link.id} className="flex items-center mb-1">
+                                            <div 
+                                              className={`w-4 h-4 rounded border mr-2 flex items-center justify-center cursor-pointer ${
+                                                selectedComponents.links.some(l => l.id === link.id)
+                                                  ? 'bg-blue-500 border-blue-500' 
+                                                  : 'border-gray-300'
+                                              }`}
+                                              onClick={() => toggleLink(link)}
+                                            >
+                                              {selectedComponents.links.some(l => l.id === link.id) && (
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                            <span className="truncate">{link.name}: {link.url}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-gray-400 pl-2">No links</div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+
+
                   </Tabs>
                 </div>
               </CardContent>
@@ -518,7 +990,7 @@ const handleChatSubmit = async () => {
             {/* Generate button moved outside the card */}
             <Button 
               onClick={handleGenerateResume} 
-              disabled={isGenerating || !selectedTemplate || selectedResumes.length === 0 || !jobDescription.trim()}
+              disabled={isGenerating || !selectedTemplate || (selectedResumes.length === 0 && !selectedResumeInfo) || !jobDescription.trim()}
               className="w-full py-6  mb-11"
               size="lg"
             >
@@ -573,13 +1045,12 @@ const handleChatSubmit = async () => {
                       </TabsTrigger>
                     </TabsList>
                     
-                    <TabsContent value="raw" className="h-full relative"> {/* Add relative positioning */}
-                      {/* Add the copy button here */}
+                    <TabsContent value="raw" className="h-full relative">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={handleCopyLatex}
-                        className="absolute top-0 right-8 z-10 gap-1" // Position the button
+                        className="absolute top-0 right-8 z-10 gap-1"
                       >
                         {isCopied ? (
                           <>
@@ -593,10 +1064,8 @@ const handleChatSubmit = async () => {
                           </>
                         )}
                       </Button>
-                      <div className="h-full overflow-y-auto p-4 pt-10" style={{ maxHeight: 'calc(100vh - 300px)' }}> {/* Add padding-top */}
-                        <pre className="text-xs whitespace-pre-wrap font-mono">
-                          {generatedLatex}
-                        </pre>
+                      <div className="h-full overflow-y-auto p-4 pt-10" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+                        {renderRawLatex()}
                       </div>
                     </TabsContent>
 
@@ -605,6 +1074,13 @@ const handleChatSubmit = async () => {
                         <div className="flex items-center justify-center h-full">
                          
                         </div>
+                      </div>
+                    </TabsContent>
+                    
+                    {/* New diff tab content */}
+                    <TabsContent value="diff" className="h-full">
+                      <div className="h-full overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+                        {renderDiff()}
                       </div>
                     </TabsContent>
                   </Tabs>
@@ -656,3 +1132,4 @@ const handleChatSubmit = async () => {
   );
 }
 
+// Render the raw LaTeX with or without diff highlighting

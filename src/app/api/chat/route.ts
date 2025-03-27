@@ -80,6 +80,7 @@ Please modify the LaTeX resume according to the user's request. Return only the 
     
     return NextResponse.json({
       modifiedLatex: modifiedLatex,
+      originalLatex: latex,  // Return the original LaTeX for diff comparison
       originalResponse: text
     });
     

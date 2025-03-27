@@ -28,17 +28,23 @@ export default function CreateResume() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("personal");
   const [personalInfo, setPersonalInfo] = useState<PersonalInfo>({
-    name: "", title: "", email: "", phone: "", location: "", summary: ""
+    name: "",
+    title: "",
+    email: "",
+    phone: "",
+    location: "",
+    summary: "" // Optional but initialized
   });
   
   const [templates, setTemplates] = useState<Template[]>([]);
-  // ... existing imports ...
-
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(() => {
-    const savedTemplate = sessionStorage.getItem('selectedTemplate');
-    return savedTemplate ? JSON.parse(savedTemplate) : null;
+    if (typeof window !== 'undefined') {
+      const savedTemplate = sessionStorage.getItem('selectedTemplate');
+      return savedTemplate ? JSON.parse(savedTemplate) : null;
+    }
+    return null;
   });
-
+  
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -61,8 +67,8 @@ export default function CreateResume() {
   const [newSection, setNewSection] = useState<ResumeSection>({
     id: "", title: "", company: "", location: "", startDate: "", endDate: "", description: "", bullets: [""]
   });
-  const [newSkill, setNewSkill] = useState<Skill>({ id: "", name: "", level: 3 });
-  const [newLink, setNewLink] = useState<Link>({ id: "", title: "", url: "" });
+  const [newSkill, setNewSkill] = useState<Skill>({ id: "", name: "", level: "3" });
+  const [newLink, setNewLink] = useState<Link>({ id: "", name: "", title: "", url: "" });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<"work" | "education" | "project" | "skill" | "link">("work");
 
@@ -148,9 +154,9 @@ export default function CreateResume() {
     if (type === "work" || type === "education" || type === "project") {
       setNewSection({ id: Date.now().toString(), title: "", company: "", location: "", startDate: "", endDate: "", description: "", bullets: [""] });
     } else if (type === "skill") {
-      setNewSkill({ id: Date.now().toString(), name: "", level: 3 });
+      setNewSkill({ id: Date.now().toString(), name: "", level: "3" });
     } else if (type === "link") {
-      setNewLink({ id: Date.now().toString(), title: "", url: "" });
+      setNewLink({ id: Date.now().toString(), name: "", title: "", url: "" });
     }
   };
 
@@ -664,7 +670,6 @@ export default function CreateResume() {
         isLoading={isLoading}
         onSelectTemplate={(template) => {
           setSelectedTemplate(template as Template);
-          // Save to session storage when template is selected
           sessionStorage.setItem('selectedTemplate', JSON.stringify(template));
           setIsTemplateDialogOpen(false);
           toast.success(`Template "${template.name}" selected`);

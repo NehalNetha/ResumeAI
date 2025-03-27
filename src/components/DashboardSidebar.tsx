@@ -15,7 +15,8 @@ import {
   X,
   PlusCircle,
   Bell,
-  User
+  User,
+  PanelLeft
 } from 'lucide-react';
 
 type SidebarItemProps = {
@@ -63,42 +64,42 @@ const DashboardSidebar = () => {
         />
       )}
 
-      {/* Mobile Toggle Button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="fixed top-4 left-4 z-50 lg:hidden"
-        onClick={toggleMobileSidebar}
-      >
-        {isMobileOpen ? <X size={20} /> : <Menu size={20} />}
-      </Button>
-
-      {/* Sidebar */}
-      <aside
+      {/* Toggle Button - Moved outside sidebar */}
+      
+     
+          
+          {/* Sidebar */}
+          <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex flex-col bg-white border-r border-gray-200 transition-all duration-300 lg:relative",
+          "fixed inset-y-0 left-0 z-40 flex flex-col bg-white border-r transition-all duration-300 lg:relative",
           isCollapsed ? "w-[70px]" : "w-[240px]",
           isMobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Sidebar Header */}
         <div className="flex h-16 items-center justify-between px-4 border-b">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded bg-blue-500 flex items-center justify-center">
+          <Link 
+            href={!isCollapsed ? "/" : ""} 
+            onClick={isCollapsed ? toggleSidebar : undefined}
+            className="flex items-center gap-2"
+          >
+            <div className="w-8 h-8 rounded bg-blue-500 flex items-center justify-center cursor-pointer">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 2L20 7V17L12 22L4 17V7L12 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
             {!isCollapsed && <span className="text-xl font-semibold">ResumeAI</span>}
           </Link>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleSidebar}
-            className="hidden lg:flex"
-          >
-            <Menu size={20} />
-          </Button>
+          {!isCollapsed && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleSidebar}
+              className="hidden lg:flex hover:bg-transparent"
+            >
+              <PanelLeft />
+            </Button>
+          )}
         </div>
 
         {/* Sidebar Content */}
