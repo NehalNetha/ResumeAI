@@ -218,8 +218,7 @@ const deleteResume = async (id: number | string, path?: string) => {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <DashboardSidebar />
+    <div className="flex min-h-screen bg-gray-50 ">
       <main className="flex-1 p-6">
         <div className="space-y-6">
           <div className="flex items-center justify-between">

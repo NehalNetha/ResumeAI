@@ -546,8 +546,8 @@ export default function CreateResume() {
     }
   };
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <DashboardSidebar />
+  
+      <>
       <div className="flex-1 flex flex-col mt-6">
         {/* Full-Width Header */}
         <ResumeHeader 
@@ -677,6 +677,6 @@ export default function CreateResume() {
         
       />
       </div>
-    </div>
+      </>
   );
 }

@@ -111,8 +111,7 @@ export default function TemplatesPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <DashboardSidebar />
+    <div className="flex min-h-screen bg-gray-50 ">
       <main className="flex-1 p-6 flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Resume Templates</h1>
