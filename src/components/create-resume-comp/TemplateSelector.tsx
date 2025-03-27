@@ -27,10 +27,10 @@ export default function TemplateSelector({
   onSelectTemplate
 }: TemplateSelectorProps) {
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange} >
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto ">
-        <DialogHeader>
-          <DialogTitle>Select a Template</DialogTitle>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className=" sm:max-w-4xl max-h-[90vh] overflow-y-auto p-6">
+        <DialogHeader className="mb-6">
+          <DialogTitle className="text-2xl">Select a Template</DialogTitle>
         </DialogHeader>
         
         {isLoading ? (
@@ -38,7 +38,7 @@ export default function TemplateSelector({
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pb-6">
             {templates.map((template) => (
               <div 
                 key={template.id}
@@ -61,15 +61,15 @@ export default function TemplateSelector({
                   )}
                   
                   {template.is_premium && (
-                    <div className="absolute top-2 right-2 bg-amber-500 text-white text-xs px-2 py-1 rounded">
+                    <div className="absolute top-3 right-3 bg-amber-500 text-white text-xs px-3 py-1 rounded-full font-medium">
                       PREMIUM
                     </div>
                   )}
                 </div>
                 
-                <div className="p-3">
-                  <h3 className="font-medium">{template.name}</h3>
-                  <p className="text-xs text-gray-500 mt-1">
+                <div className="p-4">
+                  <h3 className="font-medium text-base">{template.name}</h3>
+                  <p className="text-sm text-gray-500 mt-1">
                     {template.category.charAt(0).toUpperCase() + template.category.slice(1)}
                   </p>
                 </div>

@@ -24,17 +24,17 @@ export default function ResumeHeader({
   setIsTemplateDialogOpen, 
   handlePreviewResume,
   handleGenerateResume,
-  isGenerating = false // Default to false
+  isGenerating = false
 }: ResumeHeaderProps) {
   return (
     <>
-      <div className="flex items-center justify-between mb-6 px-5">
-        <h1 className="text-2xl font-bold">Create Your Resume</h1>
-        <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 px-4 sm:px-5 gap-4">
+        <h1 className="text-xl sm:text-2xl font-bold">Create Your Resume</h1>
+        <div className="flex flex-wrap gap-2">
           <Button 
             variant="outline" 
             onClick={() => setIsTemplateDialogOpen(true)} 
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 text-sm sm:text-base flex-1 sm:flex-auto"
             disabled={isGenerating}
           >
             <LayoutTemplate size={16} />
@@ -44,7 +44,7 @@ export default function ResumeHeader({
           <Button 
             variant="default" 
             onClick={handleGenerateResume} 
-            className="flex items-center gap-2"
+            className="flex items-center gap-2 text-sm sm:text-base flex-1 sm:flex-auto"
             disabled={!selectedTemplate || isGenerating}
           >
             {isGenerating ? (
@@ -63,10 +63,10 @@ export default function ResumeHeader({
       </div>
 
       {selectedTemplate && (
-        <Card className="mb-4 bg-blue-50 border-blue-200">
-          <CardContent className="p-4 flex items-center justify-between">
+        <Card className="mx-4 sm:mx-0 mb-4 bg-blue-50 border-blue-200">
+          <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded overflow-hidden border">
+              <div className="h-10 w-10 sm:h-12 sm:w-12 rounded overflow-hidden border flex-shrink-0">
                 {selectedTemplate.preview_url ? (
                   <img 
                     src={selectedTemplate.preview_url} 
@@ -80,8 +80,8 @@ export default function ResumeHeader({
                 )}
               </div>
               <div>
-                <h3 className="font-medium">Template: {selectedTemplate.name}</h3>
-                <p className="text-sm text-gray-600">{selectedTemplate.category.charAt(0).toUpperCase() + selectedTemplate.category.slice(1)}</p>
+                <h3 className="font-medium text-sm sm:text-base">Template: {selectedTemplate.name}</h3>
+                <p className="text-xs sm:text-sm text-gray-600">{selectedTemplate.category.charAt(0).toUpperCase() + selectedTemplate.category.slice(1)}</p>
               </div>
             </div>
             <Button 
@@ -89,6 +89,7 @@ export default function ResumeHeader({
               size="sm" 
               onClick={() => setIsTemplateDialogOpen(true)}
               disabled={isGenerating}
+              className="w-full sm:w-auto"
             >
               Change
             </Button>

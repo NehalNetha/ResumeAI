@@ -60,92 +60,127 @@ export default function ResumeTabs({
 
   return (
     <>
-      <CardContent className="p-6">
+      <CardContent className="p-4 sm:p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-6 mb-8">
-            <TabsTrigger value="personal">Personal</TabsTrigger>
-            <TabsTrigger value="work">Work</TabsTrigger>
-            <TabsTrigger value="education">Education</TabsTrigger>
-            <TabsTrigger value="projects">Projects</TabsTrigger>
-            <TabsTrigger value="skills">Skills</TabsTrigger>
-            <TabsTrigger value="links">Links</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0 pb-2">
+            <TabsList className="grid grid-cols-3 sm:grid-cols-6 mb-6 w-full min-w-[500px] sm:min-w-0 bg-slate-100 p-1 gap-x-1 gap-y-1 rounded-lg">
+              <TabsTrigger 
+                value="personal" 
+                className="text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md hover:bg-slate-50"
+              >
+                Personal
+              </TabsTrigger>
+              <TabsTrigger 
+                value="work" 
+                className="text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md hover:bg-slate-50"
+              >
+                Work
+              </TabsTrigger>
+              <TabsTrigger 
+                value="education" 
+                className="text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md hover:bg-slate-50"
+              >
+                Education
+              </TabsTrigger>
+              <TabsTrigger 
+                value="projects" 
+                className="text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              >
+                Projects
+              </TabsTrigger>
+              <TabsTrigger 
+                value="skills" 
+                className="text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              >
+                Skills
+              </TabsTrigger>
+              <TabsTrigger 
+                value="links" 
+                className="text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+              >
+                Links
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="personal">
-            <PersonalInfoTab 
-              personalInfo={personalInfo} 
-              onChange={handlePersonalInfoChange} 
-              resumeId={resumeId}
-            />
-          </TabsContent>
+          <div className="mt-4 sm:mt-6 space-y-4">
+            <TabsContent value="personal" className="mt-0">
+              <PersonalInfoTab 
+                personalInfo={personalInfo} 
+                onChange={handlePersonalInfoChange} 
+                resumeId={resumeId}
+              />
+            </TabsContent>
 
-          <TabsContent value="work">
-            <WorkExperienceTab 
-              workExperience={workExperience} 
-              onAdd={() => openDialog("work")} 
-              onRemove={(id) => removeItem("work", id)}
-              resumeId={resumeId}
-              userId={userId}
-            />
-          </TabsContent>
+            <TabsContent value="work">
+              <WorkExperienceTab 
+                workExperience={workExperience} 
+                onAdd={() => openDialog("work")} 
+                onRemove={(id) => removeItem("work", id)}
+                resumeId={resumeId}
+                userId={userId}
+              />
+            </TabsContent>
 
-          <TabsContent value="education">
-            <EducationTab 
-              education={education} 
-              onAdd={() => openDialog("education")} 
-              onRemove={(id) => removeItem("education", id)} 
-            />
-          </TabsContent>
+            <TabsContent value="education">
+              <EducationTab 
+                education={education} 
+                onAdd={() => openDialog("education")} 
+                onRemove={(id) => removeItem("education", id)} 
+              />
+            </TabsContent>
 
-          <TabsContent value="projects">
-            <ProjectsTab 
-              projects={projects} 
-              onAdd={() => openDialog("project")} 
-              onRemove={(id) => removeItem("project", id)} 
-            />
-          </TabsContent>
+            <TabsContent value="projects">
+              <ProjectsTab 
+                projects={projects} 
+                onAdd={() => openDialog("project")} 
+                onRemove={(id) => removeItem("project", id)} 
+              />
+            </TabsContent>
 
-          <TabsContent value="skills">
-            <SkillsTab 
-              skills={skills} 
-              onAdd={() => openDialog("skill")} 
-              onRemove={(id) => removeItem("skill", id)}
-              resumeId={resumeId}
-              userId={userId}
-            />
-          </TabsContent>
+            <TabsContent value="skills">
+              <SkillsTab 
+                skills={skills} 
+                onAdd={() => openDialog("skill")} 
+                onRemove={(id) => removeItem("skill", id)}
+                resumeId={resumeId}
+                userId={userId}
+              />
+            </TabsContent>
 
-          <TabsContent value="links">
-            <LinksTab 
-              links={links} 
-              onAdd={() => openDialog("link")} 
-              onRemove={(id) => removeItem("link", id)}
-              resumeId={resumeId}
-              userId={userId}
-            />
-          </TabsContent>
+            <TabsContent value="links">
+              <LinksTab 
+                links={links} 
+                onAdd={() => openDialog("link")} 
+                onRemove={(id) => removeItem("link", id)}
+                resumeId={resumeId}
+                userId={userId}
+              />
+            </TabsContent>
+          </div>
         </Tabs>
       </CardContent>
 
-      <CardFooter className="flex justify-between p-6 border-t">
+      <CardFooter className="flex justify-between p-4 sm:p-6 border-t">
         <Button 
           variant="outline" 
           onClick={handlePrevTab}
           disabled={activeTab === "personal"}
-          className="flex items-center gap-2"
+          className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
         >
           <ArrowLeft size={16} />
-          Previous
+          <span className="hidden xs:inline">Previous</span>
+          <span className="xs:hidden">Prev</span>
         </Button>
         <Button 
           onClick={handleNextTab}
           disabled={activeTab === "links"}
-          className="flex items-center gap-2"
+          className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm"
         >
-          Next
+          <span>Next</span>
           <ArrowRight size={16} />
         </Button>
       </CardFooter>
     </>
-  );
+);
 }

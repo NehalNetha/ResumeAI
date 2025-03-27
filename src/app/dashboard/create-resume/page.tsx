@@ -6,12 +6,12 @@ import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
 import { PersonalInfo, ResumeSection, Skill, Link } from '@/types/resume';
 import ResumeHeader from '@/components/create-resume-comp/ResumeHeader';
-import ResumeTabs from '@/components/create-resume-comp/ResumeTabs';
 import TemplateSelector from '@/components/create-resume-comp/TemplateSelector';
 import AddSectionDialog from '@/components/resume-builder/AddSectionDialog';
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ResumeTabs from '@/components/create-resume-comp/ResumeTabs';
 
 interface Template {
   id: string;
@@ -546,107 +546,106 @@ export default function CreateResume() {
     }
   };
   return (
-  
-      <>
-      <div className="flex-1 flex flex-col mt-6">
-        {/* Full-Width Header */}
-        <ResumeHeader 
-          selectedTemplate={selectedTemplate}
-          setIsTemplateDialogOpen={setIsTemplateDialogOpen}
-          handlePreviewResume={handleGenerateResume}
-          handleGenerateResume={handleGenerateResume}
-          isGenerating={isGenerating}
-        />
+  <>
+    <div className="flex-1 flex flex-col mt-6">
+      {/* Full-Width Header */}
+      <ResumeHeader 
+        selectedTemplate={selectedTemplate}
+        setIsTemplateDialogOpen={setIsTemplateDialogOpen}
+        handlePreviewResume={handleGenerateResume}
+        handleGenerateResume={handleGenerateResume}
+        isGenerating={isGenerating}
+      />
 
-        {/* Main Content */}
-        <main className="flex-1 p-6 flex flex-col lg:flex-row gap-6">
-          {/* Form Section */}
-          <div className={`flex-1 ${isGenerating || generatedLatex ? 'lg:w-1/2' : 'w-full'}`}>
-            <Card className="mb-6 ">
-              <ResumeTabs
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                personalInfo={personalInfo}
-                workExperience={workExperience}
-                education={education}
-                projects={projects}
-                skills={skills}
-                links={links}
-                handlePersonalInfoChange={handlePersonalInfoChange}
-                openDialog={openDialog}
-                removeItem={removeItem}
-                resumeId={resumeId}
-                userId={userId}
-              />
-            </Card>
-         
-          </div>
+      {/* Main Content */}
+      <main className="flex-1 p-4 sm:p-6 flex flex-col lg:flex-row gap-6">
+        {/* Form Section */}
+        <div className={`flex-1 ${isGenerating || generatedLatex ? 'lg:w-1/2' : 'w-full'}`}>
+          <Card className="mb-6">
+            <ResumeTabs
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              personalInfo={personalInfo}
+              workExperience={workExperience}
+              education={education}
+              projects={projects}
+              skills={skills}
+              links={links}
+              handlePersonalInfoChange={handlePersonalInfoChange}
+              openDialog={openDialog}
+              removeItem={removeItem}
+              resumeId={resumeId}
+              userId={userId}
+            />
+          </Card>
+        </div>
 
-          {/* Preview Section - Only when generating or generated */}
-          {(isGenerating || generatedLatex) && (
-            <div className="lg:w-1/2 flex flex-col gap-6">
-              <Card className="sticky top-24">
-                <div className="p-6">
-                  <h2 className="text-2xl font-bold mb-4">Resume Preview</h2>
-                  {isGenerating ? (
-                    <div className="flex items-center justify-center h-[600px] bg-gray-100 rounded-md">
-                      <p className="text-gray-500">Generating resume...</p>
-                    </div>
-                  ) : (
-                    <Tabs value={previewMode} onValueChange={(value) => setPreviewMode(value as "code" | "preview")}>
-                      <TabsList className="grid w-full grid-cols-2 mb-6">
-                        <TabsTrigger value="preview">Preview</TabsTrigger>
-                        <TabsTrigger value="code">LaTeX Code</TabsTrigger>
-                      </TabsList>
-                      <TabsContent value="preview" className="min-h-[600px]">
-                        {pdfUrl ? (
-                          <iframe 
-                            src={pdfUrl} 
-                            className="w-full h-[800px] border rounded-md"
-                            title="Resume Preview"
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-[600px] bg-gray-100 rounded-md">
-                            <p className="text-gray-500">PDF preview is being generated...</p>
-                          </div>
-                        )}
-                      </TabsContent>
-                      <TabsContent value="code">
-                        <div className="relative h-[600px]">
-                          <Button 
-                            variant="outline" 
-                            className="absolute right-2 top-2 z-10"
-                            onClick={() => {
-                              navigator.clipboard.writeText(generatedLatex || "");
-                              toast.success("LaTeX code copied!");
-                            }}
-                          >
-                            Copy Code
-                          </Button>
-                          <pre className="bg-gray-100 p-4 rounded-md overflow-auto h-full text-sm">
-                            <code>{generatedLatex}</code>
-                          </pre>
-                        </div>
-                      </TabsContent>
-                    </Tabs>
-                  )}
-                  <div className="flex justify-between mt-6">
-                    <Button variant="outline" onClick={handleSaveResume} disabled={isSaving || isGenerating}>
-                      {isSaving ? "Saving..." : "Save Resume"}
-                    </Button>
-                    <Button 
-                      onClick={() => pdfUrl && window.open(pdfUrl, '_blank')}
-                      disabled={!pdfUrl || isGenerating}
-                    >
-                      Download PDF
-                    </Button>
+        {/* Preview Section - Only when generating or generated */}
+        {(isGenerating || generatedLatex) && (
+          <div className="w-full lg:w-1/2 flex flex-col gap-6">
+            <Card className="lg:sticky lg:top-24 overflow-hidden">
+              <div className="p-4 sm:p-6">
+                <h2 className="text-2xl font-bold mb-4">Resume Preview</h2>
+                {isGenerating ? (
+                  <div className="flex items-center justify-center h-[400px] sm:h-[600px] bg-gray-100 rounded-md">
+                    <p className="text-gray-500">Generating resume...</p>
                   </div>
+                ) : (
+                  <Tabs value={previewMode} onValueChange={(value) => setPreviewMode(value as "code" | "preview")}>
+                    <TabsList className="grid w-full grid-cols-2 mb-6">
+                      <TabsTrigger value="preview">Preview</TabsTrigger>
+                      <TabsTrigger value="code">LaTeX Code</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="preview" className="min-h-[400px] sm:min-h-[600px]">
+                      {pdfUrl ? (
+                        <iframe 
+                          src={pdfUrl} 
+                          className="w-full h-[400px] sm:h-[600px] md:h-[700px] lg:h-[800px] border rounded-md"
+                          title="Resume Preview"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-[400px] sm:h-[600px] bg-gray-100 rounded-md">
+                          <p className="text-gray-500">PDF preview is being generated...</p>
+                        </div>
+                      )}
+                    </TabsContent>
+                    <TabsContent value="code">
+                      <div className="relative h-[400px] sm:h-[600px]">
+                        <Button 
+                          variant="outline" 
+                          className="absolute right-2 top-2 z-10"
+                          onClick={() => {
+                            navigator.clipboard.writeText(generatedLatex || "");
+                            toast.success("LaTeX code copied!");
+                          }}
+                        >
+                          Copy Code
+                        </Button>
+                        <pre className="bg-gray-100 p-4 rounded-md h-full text-sm overflow-y-auto whitespace-pre-wrap break-all max-w-full">
+                          <code className="block w-full">{generatedLatex}</code>
+                        </pre>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                )}
+                <div className="flex flex-col sm:flex-row justify-between gap-3 mt-6">
+                  <Button variant="outline" onClick={handleSaveResume} disabled={isSaving || isGenerating} className="w-full sm:w-auto">
+                    {isSaving ? "Saving..." : "Save Resume"}
+                  </Button>
+                  <Button 
+                    onClick={() => pdfUrl && window.open(pdfUrl, '_blank')}
+                    disabled={!pdfUrl || isGenerating}
+                    className="w-full sm:w-auto"
+                  >
+                    Download PDF
+                  </Button>
                 </div>
-              </Card>
-            </div>
-          )}
-        </main>
-      </div>
+              </div>
+            </Card>
+          </div>
+        )}
+      </main>
+    </div>
 
       <AddSectionDialog
         isOpen={isDialogOpen}

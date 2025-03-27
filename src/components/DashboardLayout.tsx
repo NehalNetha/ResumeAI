@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from "@/lib/utils";
@@ -12,7 +12,8 @@ import {
   Settings, 
   Bell,
   User,
-  PanelLeft
+  PanelLeft,
+  PenLine
 } from 'lucide-react';
 
 type SidebarItemProps = {
@@ -38,21 +39,51 @@ const SidebarItem = ({ icon, title, href, isActive, collapsed }: SidebarItemProp
   );
 };
 
+import { Menu, X } from 'lucide-react';
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
 
+  // Handle mobile view
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 768) {
+        setIsCollapsed(true);
+      }
+    };
+
+    handleResize(); // Initial check
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const toggleSidebar = () => {
-    setIsCollapsed(!isCollapsed);
+    if (window.innerWidth >= 768) {
+      setIsCollapsed(!isCollapsed);
+    } else {
+      setIsMobileMenuOpen(!isMobileMenuOpen);
+    }
   };
 
   return (
     <div className="flex min-h-screen bg-gray-50">
+      {/* Mobile Menu Toggle - Moved to right side */}
+      <button
+        className="md:hidden fixed top-4 right-4 z-50 p-2 bg-white rounded-lg shadow-md"
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+      >
+        {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+      </button>
+
       {/* Sidebar */}
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex flex-col bg-white border-r transition-all duration-300",
-          isCollapsed ? "w-[70px]" : "w-[240px]"
+          isCollapsed ? "w-[70px]" : "w-[240px]",
+          "md:translate-x-0",
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         {/* Sidebar Header */}
@@ -69,6 +100,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             {!isCollapsed && <span className="text-xl font-semibold">ResumeAI</span>}
           </Link>
+
+
           {!isCollapsed && (
             <Button
               variant="ghost"
@@ -79,6 +112,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <PanelLeft />
             </Button>
           )}
+
+          
         </div>
 
         {/* Sidebar Content */}
@@ -106,7 +141,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               collapsed={isCollapsed}
             />
             <SidebarItem 
-              icon={<Bell size={20} />} 
+              icon={<PenLine size={20} />} 
               title="Create Resume" 
               href="/dashboard/create-resume" 
               isActive={pathname === '/dashboard/create-resume'}
@@ -141,10 +176,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/50 z-30"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Main Content */}
       <div className={cn(
         "flex-1 transition-all duration-300",
-        isCollapsed ? "ml-[70px]" : "ml-[240px]"
+        isCollapsed ? "md:ml-[70px]" : "md:ml-[240px]",
+        "ml-0" // Always 0 margin on mobile
       )}>
         {children}
       </div>
