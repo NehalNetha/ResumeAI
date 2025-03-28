@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Wand2, Loader2 } from 'lucide-react';
+import { Wand2, Loader2, RefreshCw } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
@@ -66,6 +66,7 @@ export default function Dashboard() {
     skills: [],
     links: []
   });
+  const [selectedChatResume, setSelectedChatResume] = useState<Resume | null>(null);
   
   const supabase = createClient();
   
@@ -327,6 +328,7 @@ const handleChatSubmit = async () => {
       body: JSON.stringify({
         latex: generatedLatex,
         question: chatQuestion,
+        selectedResume: selectedChatResume, // Pass the selected resume
       }),
     });
     
@@ -536,12 +538,56 @@ const handleChatSubmit = async () => {
     }
   };
 
+  // Add a function to handle clearing selections and generated resume
+const handleClearAll = () => {
+  // Clear selections
+  setSelectedResumes([]);
+  setSelectedTemplate(null);
+  setSelectedResumeInfo(null);
+  setSelectedComponents({
+    personalInfo: null,
+    workExperiences: [],
+    educations: [],
+    projects: [],
+    skills: [],
+    links: []
+  });
+  
+  // Clear generated content
+  setGeneratedLatex('');
+  setOriginalLatex('');
+  setShowDiff(false);
+  setChatQuestion('');
+  setSelectedChatResume(null);
+  
+  // Reset to default tabs
+  setActiveTab('resumes');
+  setPreviewMode('raw');
+  
+  // Show confirmation toast
+  toast.success("All selections and generated content cleared");
+};
 
+ 
+  const handleSelectResumeForChat = (resume: Resume) => {
+    setSelectedChatResume(resume);
+  };
   return (
     <div className="flex min-h-screen bg-gray-50">
       <main className="flex-1 p-6 flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Resume Builder</h1>
+          
+          {/* Add Clear All button */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleClearAll}
+            className="gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Clear All
+          </Button>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-auto lg:h-[calc(100vh-150px)]">
@@ -635,6 +681,9 @@ const handleChatSubmit = async () => {
               isChatLoading={isChatLoading}
               onChatSubmit={handleChatSubmit}
               onDownloadPDF={handleDownloadPDF}
+              // Add new props for resume selection
+              uploadedResumes={uploadedResumes}
+              onSelectResumeForChat={handleSelectResumeForChat}
             />
             
          
@@ -644,3 +693,4 @@ const handleChatSubmit = async () => {
     </div>
   );
 }
+

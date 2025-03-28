@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -6,6 +6,8 @@ import { Wand2, Eye, Code, Clipboard, ClipboardCheck, FileText, Loader2 } from '
 import { Textarea } from "@/components/ui/textarea";
 import * as diffLib from 'diff';
 import ResumeAssistant from './ResumeAssistant';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Resume } from '@/types/resume';
 
 interface GeneratedResumeViewProps {
   generatedLatex: string;
@@ -23,6 +25,9 @@ interface GeneratedResumeViewProps {
   setChatQuestion: (question: string) => void;
   isChatLoading: boolean;
   onChatSubmit: () => void;
+  // Add props for resume selection
+  uploadedResumes: Resume[];
+  onSelectResumeForChat: (resume: Resume) => void;
 }
 
 export default function GeneratedResumeView({
@@ -40,11 +45,38 @@ export default function GeneratedResumeView({
   chatQuestion,
   setChatQuestion,
   isChatLoading,
-  onChatSubmit
+  onChatSubmit,
+  uploadedResumes,
+  onSelectResumeForChat
 }: GeneratedResumeViewProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+
+  const [showResumePicker, setShowResumePicker] = useState(false);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const handleChatInputKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === '#') {
+      e.preventDefault();
+      setShowResumePicker(true);
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      onChatSubmit();
+    } else if (e.key === 'Escape') {
+      setShowResumePicker(false);
+    }
+  };
+  
+  const handleResumeSelect = (resume: Resume) => {
+    onSelectResumeForChat(resume);
+    setShowResumePicker(false);
+    // Add a reference to the selected resume in the chat input
+    setChatQuestion(`${chatQuestion} [Using resume: ${resume.name}] `);
+    // Focus back on the input
+    if (chatInputRef.current) {
+      chatInputRef.current.focus();
+    }
+  };
   
   // Generate PDF preview when switching to preview tab
   useEffect(() => {
@@ -137,6 +169,8 @@ export default function GeneratedResumeView({
       </div>
     );
   };
+
+  
   
   const renderDiff = () => {
     return (
@@ -283,19 +317,42 @@ export default function GeneratedResumeView({
       <div className="mt-4 pt-4 border-t border-gray-200">
         <h3 className="text-sm font-medium mb-2">Resume Assistant</h3>
         
-        <div className="flex items-center">
+        <div className="flex items-center relative">
+          <Popover open={showResumePicker} onOpenChange={setShowResumePicker}>
+            <PopoverTrigger asChild>
+              <div className="sr-only">Resume Picker</div>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="start">
+              <div className="max-h-60 overflow-y-auto p-2">
+                <h4 className="font-medium text-sm mb-2 px-2">Select a resume to reference:</h4>
+                {uploadedResumes.length === 0 ? (
+                  <p className="text-sm text-gray-500 p-2">No resumes available</p>
+                ) : (
+                  <div className="space-y-1">
+                    {uploadedResumes.map(resume => (
+                      <div 
+                        key={resume.id.toString()}
+                        className="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer"
+                        onClick={() => handleResumeSelect(resume)}
+                      >
+                        <FileText className="h-4 w-4 mr-2 text-blue-500" />
+                        <span className="text-sm">{resume.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
+          
           <Textarea 
-            placeholder="Ask a question about your resume..." 
+            placeholder="Ask a question about your resume... (Press # to reference a specific resume)"
             className="flex-1 resize-none h-10 py-2"
             value={chatQuestion}
             onChange={(e) => setChatQuestion(e.target.value)}
             disabled={isChatLoading || !generatedLatex}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                onChatSubmit();
-              }
-            }}
+            onKeyDown={handleChatInputKeyDown}
+            ref={chatInputRef}
           />
           <Button 
             size="sm" 
@@ -318,3 +375,5 @@ export default function GeneratedResumeView({
   </Card>
   );
 }
+
+// Handle # key press to show resume picker
