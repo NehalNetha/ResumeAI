@@ -167,7 +167,7 @@ export default function GeneratedResumeView({
   };
 
   return (
-    <Card className="flex flex-col overflow-hidden lg:h-[calc(100vh-130px)] ">
+    <Card className="flex flex-col overflow-hidden  ">
 
     <CardContent className="flex-1 flex flex-col p-4">
       <div className="flex items-center justify-between mb-4">

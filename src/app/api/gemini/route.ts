@@ -8,13 +8,21 @@ export async function POST(request: Request) {
   try {
     const { resumes, template, jobDescription, resumeInfo } = await request.json();
     
-    // Log the request data
-    console.log('Gemini API Request:', {
+    // Enhanced logging to debug the issue
+    console.log('Gemini API Request Details:', {
       resumesProvided: Array.isArray(resumes) ? resumes.length : (resumes ? 1 : 0),
       templateId: template?.id,
       templateName: template?.name,
       jobDescriptionLength: jobDescription?.length || 0,
       hasResumeInfo: !!resumeInfo,
+      resumeInfoStructure: resumeInfo ? {
+        hasPersonalInfo: !!resumeInfo.personal_info,
+        workExperienceCount: (resumeInfo.work_experience || []).length,
+        educationCount: (resumeInfo.education || []).length,
+        projectsCount: (resumeInfo.projects || []).length,
+        skillsCount: (resumeInfo.skills || []).length,
+        linksCount: (resumeInfo.links || []).length
+      } : null,
       timestamp: new Date().toISOString()
     });
     
@@ -28,17 +36,16 @@ export async function POST(request: Request) {
     
     // Get the generative model - using gemini-1.5-flash for multimodal support
     const model = genAI.getGenerativeModel(
-      { model: 'gemini-1.5-flash',  
+      { model: 'gemini-2.0-flash',  
         systemInstruction: `You are an expert resume tailoring assistant. Your task is to customize a LaTeX resume template 
         based on the provided resume PDF(s), structured resume information, and job description. Focus on:
         1. Highlighting relevant skills and experiences that match the job requirements
         2. Reorganizing content to emphasize the most relevant qualifications
         3. Maintaining the original LaTeX structure and formatting
-        4. Ensuring the output is valid LaTeX code that can be compiled
+        4. Ensuring the output is valid LaTeX code that can be compiled, and please don't add 
         5. Please don't add any unnecessary text, or comments in the latex, cause it's going to be used as an actualy resume.
         6. You'll be provided with a LaTeX templation and resumes, please don't change any latex code that change the styling and layout, just fill the values that are appropriate in the code.
-        7. I repeat again, if you've provided with a latex template, and that is even with graphics, bar, charts, etc, you should not remove them, even if the job description is one worded, use your cretivity to fill in the text appropirately, but do not change the stylign of the latex and do not remove anything.
-        8. If structured resume information is provided, prioritize using that over extracted information from PDFs.
+        7. I repeat again, if you've provided with a latex template, and that is even with graphics, bar, charts, etc, you should not remove them, even if the job description is one worded, use your cretivity to fill in the text appropirately, but do not change the styling of the latex and do not remove anything.
         ` ,
       } 
     );
@@ -110,7 +117,10 @@ export async function POST(request: Request) {
         });
         
         const response = result.response;
-        const originalResponse = response.text();
+        let originalResponse = response.text();
+        
+        // Remove markdown code block delimiters if they exist
+        originalResponse = originalResponse.replace(/^```latex\n?/, '').replace(/\n?```$/, '');
         
         // Return the generated LaTeX
         return NextResponse.json({

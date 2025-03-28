@@ -348,29 +348,40 @@ const handleChatSubmit = async () => {
         })
       );
       
-      // Create a customized resumeInfo with only the selected components
+      // Create a customized resumeInfo with ONLY the selected components
       let customizedResumeInfo = null;
       if (selectedResumeInfo) {
+        console.log('Selected Resume Info:', selectedResumeInfo);
+        console.log('Selected Components:', selectedComponents);
+        
+        // Create a new object with only the selected components
         customizedResumeInfo = {
-          ...selectedResumeInfo,
           personal_info: selectedComponents.personalInfo,
-          work_experience: selectedComponents.workExperiences.length > 0 
-            ? selectedComponents.workExperiences 
-            : selectedResumeInfo.work_experience,
-          education: selectedComponents.educations.length > 0 
-            ? selectedComponents.educations 
-            : selectedResumeInfo.education,
-          projects: selectedComponents.projects.length > 0 
-            ? selectedComponents.projects 
-            : selectedResumeInfo.projects,
-          skills: selectedComponents.skills.length > 0 
-            ? selectedComponents.skills 
-            : selectedResumeInfo.skills,
-          links: selectedComponents.links.length > 0 
-            ? selectedComponents.links 
-            : selectedResumeInfo.links
+          // Only include the explicitly selected items
+          work_experience: selectedComponents.workExperiences,
+          education: selectedComponents.educations,
+          projects: selectedComponents.projects,
+          skills: selectedComponents.skills,
+          links: selectedComponents.links
         };
+        
+        console.log('Customized Resume Info being sent to API:', customizedResumeInfo);
       }
+      
+      // Log the complete request payload
+      console.log('API Request Payload:', {
+        resumes: validResumes.length,
+        templateId: templateWithLatex.id,
+        jobDescriptionLength: jobDescription.length,
+        hasResumeInfo: !!customizedResumeInfo,
+        selectedComponentCounts: customizedResumeInfo ? {
+          workExperienceCount: customizedResumeInfo.work_experience.length,
+          educationCount: customizedResumeInfo.education.length,
+          projectsCount: customizedResumeInfo.projects.length,
+          skillsCount: customizedResumeInfo.skills.length,
+          linksCount: customizedResumeInfo.links.length
+        } : null
+      });
       
       const response = await fetch('/api/gemini', {
         method: 'POST',
@@ -392,6 +403,7 @@ const handleChatSubmit = async () => {
       
       const data = await response.json();
       setGeneratedLatex(data.modifiedLatex);
+      setOriginalLatex(templateWithLatex.latex_content || '');
       toast.success("Resume template customized successfully!");
       
     } catch (error) {

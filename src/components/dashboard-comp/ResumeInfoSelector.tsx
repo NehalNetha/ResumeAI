@@ -54,6 +54,8 @@ export default function ResumeInfoSelector({
 
   const selectResumeInfo = (resumeInfo: ResumeInfo) => {
     if (selectedResumeInfo?.id === resumeInfo.id) {
+      // Deselect the resume info
+      console.log('Deselecting Resume Info');
       setSelectedResumeInfo(null);
       setSelectedComponents({
         personalInfo: null,
@@ -64,15 +66,23 @@ export default function ResumeInfoSelector({
         links: []
       });
     } else {
+      // Log the selected resume info
+      console.log('Selecting Resume Info:', resumeInfo);
+      
       setSelectedResumeInfo(resumeInfo);
+      // Always include personal info by default when selecting a resume info
+      // But start with empty arrays for all other components
       setSelectedComponents({
         personalInfo: resumeInfo.personal_info || null,
-        workExperiences: [],
+        workExperiences: [], // Start with empty selections
         educations: [],
         projects: [],
         skills: [],
         links: []
       });
+      
+      console.log('Set personal info to:', resumeInfo.personal_info);
+      console.log('Other components start empty - user must explicitly select them');
     }
   };
 
