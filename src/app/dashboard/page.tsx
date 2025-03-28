@@ -25,10 +25,6 @@ import {
 
 // Import our new components
 import JobDescriptionSection from '@/components/dashboard-comp/JobDescriptionSection';
-// import TemplateSelector from '@/components/dashboard/TemplateSelector';
-// import ResumeInfoSelector from '@/components/dashboard/ResumeInfoSelector';
-// import GeneratedResumeView from '@/components/dashboard/GeneratedResumeView';
-// import ResumeAssistant from '@/components/dashboard/ResumeAssistant';
 import TemplateSelector from '@/components/dashboard-comp/TemplateSelector';
 import GeneratedResumeView from '@/components/dashboard-comp/GeneratedResumeView';
 import ResumeAssistant from '@/components/dashboard-comp/ResumeAssistant';
@@ -73,11 +69,75 @@ export default function Dashboard() {
   
   const supabase = createClient();
   
+  // Load data from session storage on initial render
   useEffect(() => {
+    // Only run on client side
+    if (typeof window !== 'undefined') {
+      // Retrieve data from session storage
+      const storedJobDescription = sessionStorage.getItem('jobDescription');
+      const storedSelectedTemplate = sessionStorage.getItem('selectedTemplate');
+      const storedSelectedResumes = sessionStorage.getItem('selectedResumes');
+      const storedGeneratedLatex = sessionStorage.getItem('generatedLatex');
+      const storedOriginalLatex = sessionStorage.getItem('originalLatex');
+      const storedActiveTab = sessionStorage.getItem('activeTab');
+      const storedSelectedResumeInfo = sessionStorage.getItem('selectedResumeInfo');
+      const storedSelectedComponents = sessionStorage.getItem('selectedComponents');
+      
+      // Set state from session storage if available
+      if (storedJobDescription) setJobDescription(storedJobDescription);
+      if (storedSelectedTemplate) setSelectedTemplate(JSON.parse(storedSelectedTemplate));
+      if (storedSelectedResumes) setSelectedResumes(JSON.parse(storedSelectedResumes));
+      if (storedGeneratedLatex) setGeneratedLatex(storedGeneratedLatex);
+      if (storedOriginalLatex) setOriginalLatex(storedOriginalLatex);
+      if (storedActiveTab) setActiveTab(storedActiveTab as 'resumes' | 'templates' | 'info');
+      if (storedSelectedResumeInfo) setSelectedResumeInfo(JSON.parse(storedSelectedResumeInfo));
+      if (storedSelectedComponents) setSelectedComponents(JSON.parse(storedSelectedComponents));
+    }
+    
     fetchResumes();
     fetchTemplates();
     fetchUserId();
   }, []);
+  
+  // Save data to session storage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('jobDescription', jobDescription);
+      
+      if (selectedTemplate) {
+        sessionStorage.setItem('selectedTemplate', JSON.stringify(selectedTemplate));
+      }
+      
+      if (selectedResumes.length > 0) {
+        sessionStorage.setItem('selectedResumes', JSON.stringify(selectedResumes));
+      }
+      
+      if (generatedLatex) {
+        sessionStorage.setItem('generatedLatex', generatedLatex);
+      }
+      
+      if (originalLatex) {
+        sessionStorage.setItem('originalLatex', originalLatex);
+      }
+      
+      sessionStorage.setItem('activeTab', activeTab);
+      
+      if (selectedResumeInfo) {
+        sessionStorage.setItem('selectedResumeInfo', JSON.stringify(selectedResumeInfo));
+      }
+      
+      sessionStorage.setItem('selectedComponents', JSON.stringify(selectedComponents));
+    }
+  }, [
+    jobDescription, 
+    selectedTemplate, 
+    selectedResumes, 
+    generatedLatex, 
+    originalLatex, 
+    activeTab,
+    selectedResumeInfo,
+    selectedComponents
+  ]);
   
   // Calculate diff when original or generated LaTeX changes
   useEffect(() => {
