@@ -52,6 +52,7 @@ export default function GeneratedResumeView({
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [cachedLatex, setCachedLatex] = useState<string | null>(null); // <-- Add state for cached LaTeX
 
   const [showResumePicker, setShowResumePicker] = useState(false);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
@@ -80,10 +81,31 @@ export default function GeneratedResumeView({
   
   // Generate PDF preview when switching to preview tab
   useEffect(() => {
-    if (previewMode === 'preview' && generatedLatex && !pdfUrl) {
-      generatePdfPreview();
+    // Only attempt to show/generate preview if in preview mode and latex exists
+    if (previewMode === 'preview' && generatedLatex) {
+      // Check if the current URL is for the current LaTeX content
+      if (pdfUrl && cachedLatex === generatedLatex) {
+        // Cache hit: We already have the correct preview loaded
+        setIsPreviewLoading(false);
+        setPreviewError(null);
+      } else {
+        // Cache miss or no URL: Need to generate a new preview
+        // If pdfUrl exists but latex is different, revoke the old URL first
+        if (pdfUrl && cachedLatex !== generatedLatex) {
+             URL.revokeObjectURL(pdfUrl);
+             setPdfUrl(null); // Clear the state immediately
+             setCachedLatex(null);
+        }
+        generatePdfPreview();
+      }
+    } else if (previewMode !== 'preview') {
+        // Optional: Clear loading/error when switching away from preview tab
+        setIsPreviewLoading(false);
+        setPreviewError(null);
+        // Do not revoke URL here - user might switch back
     }
-  }, [previewMode, generatedLatex]);
+    // NOTE: We don't include pdfUrl or cachedLatex in deps to avoid re-running unnecessarily
+  }, [previewMode, generatedLatex]); // Re-run only when mode or latex changes
   
   // Clean up PDF URL when component unmounts
   useEffect(() => {
@@ -92,46 +114,75 @@ export default function GeneratedResumeView({
         URL.revokeObjectURL(pdfUrl);
       }
     };
-  }, []);
-  
+  }, [pdfUrl]); // Depend on pdfUrl to ensure the *current* URL is revoked if it changes before unmount
+
   const generatePdfPreview = async () => {
     if (!generatedLatex) return;
-    
+  
     setIsPreviewLoading(true);
     setPreviewError(null);
-    
+    // Store the latex content we are generating for, in case it changes during the async operation
+    const latexToGenerateFor = generatedLatex;
+  
     try {
-      const response = await fetch('http://localhost:5001/compile', {
+      // Use the compile endpoint to get PDF directly
+      const response = await fetch('https://latex-compiler-1082803956279.asia-south1.run.app/compile', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          latex_content: generatedLatex
+          latex_content: latexToGenerateFor, // Use the stored latex content
+          target_filename: "resume.tex"
         }),
       });
-      
+  
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to generate PDF preview');
+        const errorText = await response.text();
+        console.error("PDF compilation error:", errorText);
+        throw new Error(errorText || 'Failed to generate PDF preview');
       }
-      
+  
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      
-      // Revoke old URL if exists
-      if (pdfUrl) {
-        URL.revokeObjectURL(pdfUrl);
+      const newUrl = URL.createObjectURL(blob);
+  
+      // Check if latex content has changed *while* we were fetching
+      if (latexToGenerateFor === generatedLatex) {
+        // Revoke previous URL *before* setting the new one, if it exists
+        if (pdfUrl) {
+            URL.revokeObjectURL(pdfUrl);
+        }
+        // Update state with the new URL and the corresponding LaTeX
+        setPdfUrl(newUrl);
+        setCachedLatex(latexToGenerateFor);
+      } else {
+        // Latex changed during fetch - discard this result and revoke its URL
+        console.warn("Latex content changed during preview generation. Discarding stale result.");
+        URL.revokeObjectURL(newUrl);
+        // The main useEffect will trigger again for the *new* generatedLatex
       }
-      
-      setPdfUrl(url);
-    } catch (error) {
-      console.error('Error generating PDF preview:', error);
-      setPreviewError(error instanceof Error ? error.message : 'Failed to generate PDF preview');
-    } finally {
-      setIsPreviewLoading(false);
-    }
-  };
+  
+      } catch (error) {
+        console.error('Error generating preview:', error);
+         // Only set error if the request was for the *current* latex
+         if (latexToGenerateFor === generatedLatex) {
+            setPreviewError(error instanceof Error ? error.message : 'Failed to generate preview');
+            // Clear potentially outdated URL if generation failed for current latex
+            if (pdfUrl) {
+              URL.revokeObjectURL(pdfUrl);
+              setPdfUrl(null);
+              setCachedLatex(null);
+            }
+         }
+      } finally {
+        // Only set loading to false if the request was for the *current* latex
+        if (latexToGenerateFor === generatedLatex) {
+          setIsPreviewLoading(false);
+        }
+      }
+    };
+  
+ 
   
   const handleCopyLatex = () => {
     if (onCopyLatex) {
@@ -201,7 +252,7 @@ export default function GeneratedResumeView({
   };
 
   return (
-    <Card className="flex flex-col overflow-hidden  ">
+    <Card className="flex flex-col lg:h-full"> {/* Assume parent provides height context */}
 
     <CardContent className="flex-1 flex flex-col p-4">
       <div className="flex items-center justify-between mb-4">
@@ -225,9 +276,12 @@ export default function GeneratedResumeView({
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-hidden bg-white border border-gray-200 rounded-lg">
-          <Tabs value={previewMode} onValueChange={(value) => setPreviewMode(value as 'raw' | 'preview')} className="w-full">
-            <TabsList className="w-full mb-2">
+        // Modify this container: Make it a flex column, remove overflow-hidden
+        <div className="flex-1 flex flex-col bg-white border border-gray-200 rounded-lg"> {/* Removed overflow-hidden, added flex flex-col */}
+          {/* Make Tabs component itself flexible and grow */}
+          <Tabs value={previewMode} onValueChange={(value) => setPreviewMode(value as 'raw' | 'preview')} className="w-full flex flex-col flex-1"> {/* Added flex flex-col flex-1 */}
+            {/* Ensure TabsList doesn't shrink */}
+            <TabsList className="w-full mb-2 flex-shrink-0"> {/* Added flex-shrink-0 */}
               <TabsTrigger value="raw" className="flex-1 gap-2">
                 <Code className="h-4 w-4" />
                 Raw LaTeX
@@ -238,12 +292,13 @@ export default function GeneratedResumeView({
               </TabsTrigger>
             </TabsList>
             
-            <TabsContent value="raw" className="h-full relative">
+            {/* Raw LaTeX Tab: Use relative/absolute for scrolling within flex child */}
+            <TabsContent value="raw" className="relative flex-1 overflow-hidden"> {/* Added relative flex-1 overflow-hidden */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleCopyLatex}
-                className="absolute top-0 right-8 z-10 gap-1"
+                className="absolute top-0 right-8 z-10 gap-1" // Keep absolute positioning relative to TabsContent
               >
                 {isCopied ? (
                   <>
@@ -257,18 +312,22 @@ export default function GeneratedResumeView({
                   </>
                 )}
               </Button>
-              <div className="h-full overflow-y-auto p-4 pt-10" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+              {/* This div now handles scrolling within the flex space */}
+              <div className="absolute inset-0 overflow-y-auto p-4 pt-10"> {/* Changed to absolute inset-0 for scrolling */}
                 {renderRawLatex()}
               </div>
             </TabsContent>
 
-            <TabsContent value="preview" className="h-full">
-              <div className="h-full overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 300px)' }}>
-                <div className="flex items-center justify-center h-full">
+            {/* Preview Tab: Make it a flex container that grows */}
+            <TabsContent value="preview" className="flex-1 flex flex-col"> {/* Added flex-1 flex flex-col */}
+              {/* This div will now take the height given by flex-1 */}
+              <div className="flex-1 flex items-center justify-center p-0"> {/* Added flex-1 flex */}
+                {/* Inner container to center content */}
+                <div className="w-full h-full flex items-center justify-center">
                   {isPreviewLoading ? (
                     <div className="flex flex-col items-center justify-center">
                       <Loader2 className="h-8 w-8 animate-spin text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-500">Generating PDF preview...</p>
+                      <p className="text-sm text-gray-500">Generating preview...</p>
                     </div>
                   ) : previewError ? (
                     <div className="text-center p-4 border border-red-200 rounded-md bg-red-50 max-w-md">
@@ -284,11 +343,16 @@ export default function GeneratedResumeView({
                       </Button>
                     </div>
                   ) : pdfUrl ? (
-                    <iframe 
-                      src={pdfUrl} 
-                      className="w-full h-full border-0" 
-                      title="Resume PDF Preview"
-                    />
+                    // Increase the height of the container div and the iframe
+                    <div className="w-full h-full" style={{ minHeight: '90vh' }}> 
+                      <iframe 
+                        src={pdfUrl} 
+                        title="Resume Preview" 
+                        // Use h-full to fill parent div, keep minHeight as fallback
+                        className="w-full h-full border border-gray-200 shadow-sm" 
+                        style={{ minHeight: '700px' }} // Keep min-height constraint
+                      />
+                    </div>
                   ) : (
                     <div className="text-center">
                       <Button 
@@ -303,9 +367,10 @@ export default function GeneratedResumeView({
               </div>
             </TabsContent>
             
-            {/* New diff tab content */}
-            <TabsContent value="diff" className="h-full">
-              <div className="h-full overflow-y-auto p-4" style={{ maxHeight: 'calc(100vh - 300px)' }}>
+            {/* Diff Tab: Similar scrolling setup as Raw Tab */}
+            <TabsContent value="diff" className="relative flex-1 overflow-hidden"> {/* Added relative flex-1 overflow-hidden */}
+                {/* This div now handles scrolling */}
+              <div className="absolute inset-0 overflow-y-auto p-4"> {/* Changed to absolute inset-0 for scrolling */}
                 {renderDiff()}
               </div>
             </TabsContent>

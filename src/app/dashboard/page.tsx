@@ -476,65 +476,72 @@ const handleChatSubmit = async () => {
     }
   };
 
+  // Add the PDF download handler function
   const handleDownloadPDF = async () => {
     if (!generatedLatex) {
       toast.error("No LaTeX content to compile");
       return;
     }
-    
+
+    const downloadToast = toast.loading("Compiling PDF..."); // Show loading toast
+
     try {
-      // Set loading state if needed
-      const downloadToast = toast.loading("Compiling PDF...");
-      
-      // Send the LaTeX content to the backend
-      const response = await fetch('http://localhost:5001/compile', {
+      // Replace with your actual Cloud Run endpoint URL
+      const compileEndpoint = 'https://latex-compiler-1082803956279.asia-south1.run.app/compile';
+
+      const response = await fetch(compileEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          latex_content: generatedLatex
+          latex_content: generatedLatex,
+          target_filename: "resume.tex" // You can make this dynamic if needed
         }),
       });
-      
+
       if (!response.ok) {
-        // Try to get error details from response
-        const errorData = await response.json().catch(() => ({}));
+        // Try to read the error message from the plain text response
+        const errorText = await response.text();
+        console.error("PDF Compilation Error Response:", errorText);
         toast.dismiss(downloadToast);
-        
-        // Display a more detailed error message
-        if (errorData.error) {
-          toast.error(`Compilation Error: ${errorData.error}`);
-          console.error('LaTeX compilation details:', errorData.details || 'No details available');
-        } else {
-          toast.error('Failed to compile PDF');
-        }
+        // Display the error text received from the server
+        toast.error(`Compilation failed: ${errorText.substring(0, 500)}...`); // Show first 500 chars
         return;
       }
-      
+
       // Get the PDF as a blob
       const blob = await response.blob();
-      
+
+      // Check if the blob is of PDF type, otherwise it might be an error response not caught above
+      if (blob.type !== 'application/pdf') {
+          console.error("Received non-PDF response:", blob.type);
+          toast.dismiss(downloadToast);
+          toast.error("Failed to compile: Server returned unexpected content type.");
+          return;
+      }
+
       // Create a URL for the blob
       const url = window.URL.createObjectURL(blob);
-      
+
       // Create a temporary anchor element to trigger download
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'resume.pdf';
+      a.download = 'resume.pdf'; // The filename for the downloaded file
       document.body.appendChild(a);
       a.click();
-      
+
       // Clean up
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
+
       toast.dismiss(downloadToast);
       toast.success("PDF downloaded successfully!");
-      
+
     } catch (error) {
       console.error('Error downloading PDF:', error);
-      toast.error(error instanceof Error ? error.message : "Failed to download PDF");
+      toast.dismiss(downloadToast); // Dismiss loading toast on error
+      toast.error(error instanceof Error ? `Download Error: ${error.message}` : "An unexpected error occurred during download");
     }
   };
 
@@ -620,6 +627,8 @@ const handleClearAll = () => {
                         onFileInput={handleFileInput}
                         visible={activeTab === 'resumes'}
                       />
+
+                      <div className=''>
                       
                       <TemplateSelector
                         templates={templates}
@@ -627,6 +636,7 @@ const handleClearAll = () => {
                         onSelectTemplate={selectTemplate}
                         visible={activeTab === 'templates'}
                       />
+                      </div>
                       
                       <ResumeInfoSelector
                         userId={userId}
@@ -665,7 +675,7 @@ const handleClearAll = () => {
           </div>
           
           {/* Right side - Preview and Download */}
-          <div className="flex flex-col space-y-4">
+          <div className="h-full">
           <GeneratedResumeView
               generatedLatex={generatedLatex}
               originalLatex={originalLatex}
