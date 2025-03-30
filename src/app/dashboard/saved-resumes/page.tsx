@@ -105,7 +105,7 @@ export default function SavedResumesPage() {
         return;
       }
       
-      // Get template names for each resume
+      // Get template names for each resume and generate signed URLs
       const resumesWithTemplateNames = await Promise.all(
         resumesData.map(async (resume) => {
           const { data: templateData } = await supabase
@@ -114,9 +114,16 @@ export default function SavedResumesPage() {
             .eq('id', resume.template_id)
             .single();
             
+          // Generate a signed URL for each PDF that expires in 24 hours
+          const { data: signedUrlData } = await supabase
+            .storage
+            .from('created-resumes')
+            .createSignedUrl(resume.pdf_path, 60 * 60 * 24); // 24 hours in seconds
+          
           return {
             ...resume,
-            template_name: templateData?.name || 'Unknown Template'
+            template_name: templateData?.name || 'Unknown Template',
+            pdf_url: signedUrlData?.signedUrl || resume.pdf_url // Use signed URL if available
           };
         })
       );
@@ -136,11 +143,12 @@ export default function SavedResumesPage() {
     setPreviewOpen(true);
   };
   
+  // Update the handleDownload function to use the signed URL
   const handleDownload = async (resume: SavedResume) => {
     try {
       // Create a link to download the file
       const a = document.createElement('a');
-      a.href = resume.pdf_url;
+      a.href = resume.pdf_url; // This is now a signed URL
       a.download = `${resume.name}.pdf`;
       document.body.appendChild(a);
       a.click();
