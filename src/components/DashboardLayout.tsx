@@ -13,7 +13,8 @@ import {
   Bell,
   User,
   PanelLeft,
-  PenLine
+  PenLine,
+  Save
 } from 'lucide-react';
 
 type SidebarItemProps = {
@@ -145,6 +146,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               title="Create Resume" 
               href="/dashboard/create-resume" 
               isActive={pathname === '/dashboard/create-resume'}
+              collapsed={isCollapsed}
+            />
+
+            <SidebarItem 
+              icon={<Save size={20} />} 
+              title="Created Resumes" 
+              href="/dashboard/saved-resumes" 
+              isActive={pathname === '/dashboard/saved-resume'}
               collapsed={isCollapsed}
             />
             <SidebarItem 

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Wand2, Loader2, RefreshCw } from 'lucide-react';
+import { Wand2, Loader2, RefreshCw, CreditCard } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { toast } from "sonner";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,7 +67,10 @@ export default function Dashboard() {
     links: []
   });
   const [selectedChatResume, setSelectedChatResume] = useState<Resume | null>(null);
-  
+  // Add credit state
+  const [userCredits, setUserCredits] = useState<number>(0);
+  const [isLoadingCredits, setIsLoadingCredits] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const supabase = createClient();
   
   // Load data from session storage on initial render
@@ -219,12 +222,160 @@ export default function Dashboard() {
       if (user) {
         setUserId(user.id);
         fetchResumeInfos(user.id);
+        fetchUserCredits(user.id); // Add this line to fetch credits
       }
     } catch (error) {
       console.error('Error fetching user:', error);
     }
   };
   
+  // Add a function to fetch user credits
+  const fetchUserCredits = async (userId: string) => {
+    try {
+      setIsLoadingCredits(true);
+      const { data, error } = await supabase
+        .from('user_credits')
+        .select('credits')
+        .eq('user_id', userId)
+        .single();
+        
+      if (error) {
+        console.error('Error fetching user credits:', error);
+        toast.error("Failed to load credit information");
+      } else if (data) {
+        setUserCredits(data.credits);
+      }
+    } catch (error) {
+      console.error('Error fetching user credits:', error);
+    } finally {
+      setIsLoadingCredits(false);
+    }
+  };
+  
+  // Add a function to update user credits
+  const updateUserCredits = async (amount: number) => {
+    if (!userId) return;
+    
+    try {
+      // First, update the local state optimistically
+      const newCredits = userCredits - amount;
+      setUserCredits(newCredits);
+      
+      // Then update in the database
+      const { error } = await supabase
+        .from('user_credits')
+        .update({ credits: newCredits })
+        .eq('user_id', userId);
+        
+      if (error) {
+        throw error;
+      }
+      
+      // Record the transaction in credits_history
+      const { error: historyError } = await supabase
+        .from('credits_history')
+        .insert([{
+          user_id: userId,
+          amount: -amount, // Negative amount for consumption
+          description: 'Resume generation',
+          transaction_type: 'consumption'
+        }]);
+        
+      if (historyError) {
+        console.error('Error recording credit history:', historyError);
+      }
+      
+    } catch (error) {
+      console.error('Error updating user credits:', error);
+      toast.error("Failed to update credits");
+      // Revert the optimistic update
+      fetchUserCredits(userId);
+    }
+  };
+  
+  const handleGenerateResume = async () => {
+    if (!selectedTemplate || (selectedResumes.length === 0 && !selectedResumeInfo) || !jobDescription.trim()) {
+      toast("Please select a template, at least one resume or saved information, and provide a job description");
+      return;
+    }
+    
+    // Check if user has enough credits
+    if (userCredits < 5) {
+      toast.error("You don't have enough credits. Each resume generation requires 5 credits.");
+      return;
+    }
+    
+    setIsGenerating(true);
+    
+    try {
+      // Get the template's LaTeX content if not already loaded
+      let templateWithLatex = selectedTemplate;
+      if (!selectedTemplate.latex_content) {
+        const { data, error } = await supabase
+          .from('templates')
+          .select('latex_content')
+          .eq('id', selectedTemplate.id)
+          .single();
+          
+        if (error) throw error;
+        
+        if (data) {
+          templateWithLatex = {
+            ...selectedTemplate,
+            latex_content: data.latex_content
+          };
+        }
+      }
+      
+      // Create a customized resumeInfo with ONLY the selected components
+      let customizedResumeInfo = null;
+      if (selectedResumeInfo) {
+        // Create a new object with only the selected components
+        customizedResumeInfo = {
+          personal_info: selectedComponents.personalInfo,
+          work_experience: selectedComponents.workExperiences,
+          education: selectedComponents.educations,
+          projects: selectedComponents.projects,
+          skills: selectedComponents.skills,
+          links: selectedComponents.links
+        };
+      }
+      
+      const response = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          resumes: selectedResumes,
+          template: templateWithLatex,
+          jobDescription,
+          resumeInfo: customizedResumeInfo
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to generate customized resume');
+      }
+      
+      const data = await response.json();
+      setGeneratedLatex(data.modifiedLatex);
+      setOriginalLatex(templateWithLatex.latex_content || '');
+      
+      // Deduct 5 credits after successful generation
+      await updateUserCredits(5);
+      
+      toast.success("Resume template customized successfully! (5 credits used)");
+      
+    } catch (error) {
+      console.error('Error generating resume:', error);
+      toast.error(error instanceof Error ? error.message : "Failed to customize resume template");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const fetchResumeInfos = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -249,6 +400,8 @@ export default function Dashboard() {
       await uploadFiles(files);
     }
   };
+
+  
   
   const uploadFiles = async (files: File[]) => {
     setIsLoading(true);
@@ -306,6 +459,85 @@ export default function Dashboard() {
       setIsLoading(false);
     }
   };
+
+
+  const handleSaveResume = async () => {
+    if (!generatedLatex || !selectedTemplate) {
+      toast.error("No resume to save");
+      return;
+    }
+    
+    setIsSaving(true);
+    
+    try {
+      // First, generate the PDF
+      const response = await fetch('https://latex-compiler-1082803956279.asia-south1.run.app/compile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          latex_content: generatedLatex,
+          target_filename: "resume.tex"
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || 'Failed to generate PDF');
+      }
+      
+      // Get the PDF as a blob
+      const pdfBlob = await response.blob();
+      
+      // Create a filename for the saved resume
+      const timestamp = new Date().toISOString();
+      const fileName = `resume_${timestamp.replace(/[:.]/g, '-')}.pdf`;
+      
+      // Upload PDF to Supabase Storage
+      const { data: storageData, error: storageError } = await supabase
+        .storage
+        .from('created-resumes')
+        .upload(`${userId}/${fileName}`, pdfBlob);
+        
+      if (storageError) {
+        throw storageError;
+      }
+      
+      // Get the public URL for the uploaded file
+      const { data: publicUrlData } = supabase
+        .storage
+        .from('created-resumes')
+        .getPublicUrl(`${userId}/${fileName}`);
+      
+      // Save metadata to the database
+      const { data, error } = await supabase
+        .from('saved_resumes')
+        .insert([
+          {
+            user_id: userId,
+            name: `Resume - ${new Date().toLocaleDateString()}`,
+            template_id: selectedTemplate.id,
+            latex_content: generatedLatex,
+            pdf_path: `${userId}/${fileName}`,
+            pdf_url: publicUrlData.publicUrl,
+            job_description: jobDescription,
+            created_at: timestamp
+          }
+        ]);
+        
+      if (error) throw error;
+      
+      toast.success("Resume saved successfully!");
+      
+    } catch (error) {
+      console.error('Error saving resume:', error);
+      toast.error(error instanceof Error ? error.message : "Failed to save resume");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
 
 
 const handleChatSubmit = async () => {
@@ -373,108 +605,7 @@ const handleChatSubmit = async () => {
     setSelectedTemplate(template);
     toast(`Template "${template.name}" selected`);
   };
-  
-  const handleGenerateResume = async () => {
-    if (!selectedTemplate || (selectedResumes.length === 0 && !selectedResumeInfo) || !jobDescription.trim()) {
-      toast("Please select a template, at least one resume or saved information, and provide a job description");
-      return;
-    }
-    
-    setIsGenerating(true);
-    
-    try {
-      // Get the template's LaTeX content if not already loaded
-      let templateWithLatex = selectedTemplate;
-      if (!selectedTemplate.latex_content) {
-        const { data, error } = await supabase
-          .from('templates')
-          .select('latex_content')
-          .eq('id', selectedTemplate.id)
-          .single();
-          
-        if (error) throw error;
-        
-        if (data) {
-          templateWithLatex = {
-            ...selectedTemplate,
-            latex_content: data.latex_content
-          };
-        }
-      }
-      
-      // Ensure all resume URLs are still valid
-      const validResumes = await Promise.all(
-        selectedResumes.map(async (resume) => {
-          // ... URL validation logic
-          return resume;
-        })
-      );
-      
-      // Create a customized resumeInfo with ONLY the selected components
-      let customizedResumeInfo = null;
-      if (selectedResumeInfo) {
-        console.log('Selected Resume Info:', selectedResumeInfo);
-        console.log('Selected Components:', selectedComponents);
-        
-        // Create a new object with only the selected components
-        customizedResumeInfo = {
-          personal_info: selectedComponents.personalInfo,
-          // Only include the explicitly selected items
-          work_experience: selectedComponents.workExperiences,
-          education: selectedComponents.educations,
-          projects: selectedComponents.projects,
-          skills: selectedComponents.skills,
-          links: selectedComponents.links
-        };
-        
-        console.log('Customized Resume Info being sent to API:', customizedResumeInfo);
-      }
-      
-      // Log the complete request payload
-      console.log('API Request Payload:', {
-        resumes: validResumes.length,
-        templateId: templateWithLatex.id,
-        jobDescriptionLength: jobDescription.length,
-        hasResumeInfo: !!customizedResumeInfo,
-        selectedComponentCounts: customizedResumeInfo ? {
-          workExperienceCount: customizedResumeInfo.work_experience.length,
-          educationCount: customizedResumeInfo.education.length,
-          projectsCount: customizedResumeInfo.projects.length,
-          skillsCount: customizedResumeInfo.skills.length,
-          linksCount: customizedResumeInfo.links.length
-        } : null
-      });
-      
-      const response = await fetch('/api/gemini', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          resumes: validResumes,
-          template: templateWithLatex,
-          jobDescription,
-          resumeInfo: customizedResumeInfo
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to generate customized resume');
-      }
-      
-      const data = await response.json();
-      setGeneratedLatex(data.modifiedLatex);
-      setOriginalLatex(templateWithLatex.latex_content || '');
-      toast.success("Resume template customized successfully!");
-      
-    } catch (error) {
-      console.error('Error generating resume:', error);
-      toast.error(error instanceof Error ? error.message : "Failed to customize resume template");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
+
 
   // Add the PDF download handler function
   const handleDownloadPDF = async () => {
@@ -579,22 +710,40 @@ const handleClearAll = () => {
   const handleSelectResumeForChat = (resume: Resume) => {
     setSelectedChatResume(resume);
   };
+
+
+  
   return (
     <div className="flex min-h-screen bg-gray-50">
       <main className="flex-1 p-6 flex flex-col">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Resume Builder</h1>
           
-          {/* Add Clear All button */}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleClearAll}
-            className="gap-2"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Clear All
-          </Button>
+          <div className="flex items-center gap-4">
+            {/* Credits display */}
+            <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium flex items-center">
+              <CreditCard className="h-4 w-4 mr-1" />
+              {isLoadingCredits ? (
+                <span className="flex items-center">
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  Loading...
+                </span>
+              ) : (
+                <span>{userCredits} credits</span>
+              )}
+            </div>
+            
+            {/* Clear All button */}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleClearAll}
+              className="gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Clear All
+            </Button>
+          </div>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-auto lg:h-[calc(100vh-150px)]">
@@ -668,7 +817,7 @@ const handleClearAll = () => {
               ) : (
                 <>
                   <Wand2 className="mr-2 h-5 w-5" />
-                  Generate Customized Resume
+                  Generate Customized Resume (5 credits)
                 </>
               )}
             </Button>
@@ -694,6 +843,8 @@ const handleClearAll = () => {
               // Add new props for resume selection
               uploadedResumes={uploadedResumes}
               onSelectResumeForChat={handleSelectResumeForChat}
+              onSaveResume={handleSaveResume}
+              isSaving={isSaving}
             />
             
          

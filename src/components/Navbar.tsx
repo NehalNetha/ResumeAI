@@ -2,14 +2,18 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { MenuIcon, X } from 'lucide-react';
+import { MenuIcon, X, Crown, Coins } from 'lucide-react';
 import { createClient } from '@/utils/supabase/client';
 import { User } from '@supabase/auth-js';
+import Image from 'next/image';
+import Link from 'next/link';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [isPremium, setIsPremium] = useState(false);
+  const [credits, setCredits] = useState<number | null>(null);
 
   const supabase = createClient();
 
@@ -31,13 +35,58 @@ const Navbar = () => {
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
+      
+      // If user is logged in, check subscription status and credits
+      if (session?.user) {
+        const { data: subscription } = await supabase
+          .from('user_subscriptions')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .eq('status', 'active')
+          .single();
+          
+        setIsPremium(!!subscription);
+        
+        // Fetch user credits
+        const { data: userCredits } = await supabase
+          .from('user_credits')
+          .select('credits')
+          .eq('user_id', session.user.id)
+          .single();
+          
+        setCredits(userCredits?.credits || 0);
+      }
     };
 
     getSession();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
+      
+      // Check subscription status and credits when auth state changes
+      if (session?.user) {
+        const { data: subscription } = await supabase
+          .from('user_subscriptions')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .eq('status', 'active')
+          .single();
+          
+        setIsPremium(!!subscription);
+        
+        // Fetch user credits
+        const { data: userCredits } = await supabase
+          .from('user_credits')
+          .select('credits')
+          .eq('user_id', session.user.id)
+          .single();
+          
+        setCredits(userCredits?.credits || 0);
+      } else {
+        setIsPremium(false);
+        setCredits(null);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -67,11 +116,15 @@ const Navbar = () => {
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
           <div className="flex items-center">
-            <a href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded bg-blue-500 flex items-center justify-center">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L20 7V17L12 22L4 17V7L12 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+            <a href="/" className="flex items-center ">
+              <div className="w-[100px] h-[100px] py-4 rounded flex items-center justify-center">
+                <Image
+                  src="/logo.svg"
+                  alt="Logo"
+                  width={200}
+                  height={200}
+                  className="w-full h-full "
+                />
               </div>
               <span className="text-xl font-semibold">ResumeAI</span>
             </a>
@@ -89,6 +142,19 @@ const Navbar = () => {
          <div className="hidden md:flex items-center space-x-4">
             {user ? (
               <div className="flex items-center space-x-3">
+                {isPremium && (
+                  <div className="flex items-center text-yellow-500" title="Premium Member">
+                    <Crown size={16} className="mr-1" />
+                    <span className="text-xs font-medium">Premium</span>
+                  </div>
+                )}
+                
+                {/* Display user credits */}
+                <div className="flex items-center bg-gray-100 px-2 py-1 rounded-full" title="Available Credits">
+                  <Coins size={14} className="text-yellow-500 mr-1" />
+                  <span className="text-xs font-medium">{credits !== null ? credits : '...'}</span>
+                </div>
+                
                 {user.user_metadata?.avatar_url && (
                   <img 
                     src={user.user_metadata.avatar_url} 
@@ -99,15 +165,24 @@ const Navbar = () => {
                 <Button variant="ghost" size="sm" className="font-medium" onClick={handleLogout}>
                   Logout
                 </Button>
+                <Link href="/dashboard">
+                  <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white">
+                    Dashboard
+                  </Button>
+                </Link>
               </div>
             ) : (
-              <Button variant="ghost" size="sm" className="font-medium" onClick={handleLogin}>
-                Login
-              </Button>
+              <>
+                <Button variant="ghost" size="sm" className="font-medium" onClick={handleLogin}>
+                  Login
+                </Button>
+                <Link href="/#pricing">
+                  <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white">
+                    Get Started
+                  </Button>
+                </Link>
+              </>
             )}
-            <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white">
-              Get Started
-            </Button>
           </div>
 
           {/* Mobile Menu Button */}
@@ -136,6 +211,19 @@ const Navbar = () => {
                 {user ? (
                   <>
                     <div className="flex items-center space-x-2 mb-2">
+                      {isPremium && (
+                        <div className="flex items-center text-yellow-500 mr-2" title="Premium Member">
+                          <Crown size={16} className="mr-1" />
+                          <span className="text-xs font-medium">Premium</span>
+                        </div>
+                      )}
+                      
+                      {/* Display user credits in mobile view */}
+                      <div className="flex items-center bg-gray-100 px-2 py-1 rounded-full" title="Available Credits">
+                        <Coins size={14} className="text-yellow-500 mr-1" />
+                        <span className="text-xs font-medium">{credits !== null ? credits : '...'}</span>
+                      </div>
+                      
                       {user.user_metadata?.avatar_url && (
                         <img 
                           src={user.user_metadata.avatar_url} 
@@ -147,15 +235,24 @@ const Navbar = () => {
                     <Button variant="outline" size="sm" className="w-full font-medium" onClick={handleLogout}>
                       Logout
                     </Button>
+                    <Link href="/dashboard">
+                      <Button size="sm" className="w-full bg-blue-500 hover:bg-blue-600 text-white">
+                        Dashboard
+                      </Button>
+                    </Link>
                   </>
                 ) : (
-                  <Button variant="outline" size="sm" className="w-full font-medium" onClick={handleLogin}>
-                    Login 
-                  </Button>
+                  <>
+                    <Button variant="outline" size="sm" className="w-full font-medium" onClick={handleLogin}>
+                      Login 
+                    </Button>
+                    <Link href="/#pricing">
+                      <Button size="sm" className="w-full bg-blue-500 hover:bg-blue-600 text-white">
+                        Get Started
+                      </Button>
+                    </Link>
+                  </>
                 )}
-                <Button size="sm" className="w-full bg-blue-500 hover:bg-blue-600 text-white">
-                  Get Started
-                </Button>
               </div>
             </div>
           </div>

@@ -46,6 +46,9 @@ export async function POST(request: Request) {
         5. Please don't add any unnecessary text, or comments in the latex, cause it's going to be used as an actualy resume.
         6. You'll be provided with a LaTeX templation and resumes, please don't change any latex code that change the styling and layout, just fill the values that are appropriate in the code.
         7. I repeat again, if you've provided with a latex template, and that is even with graphics, bar, charts, etc, you should not remove them, even if the job description is one worded, use your cretivity to fill in the text appropirately, but do not change the styling of the latex and do not remove anything.
+         8. DO NOT add any last updated date, footer, page numbers, or timestamps like \\hfill{\\it\\footnotesize Updated \\today}} to the LaTeX code.
+        9. DO NOT include any date-related commands or footer elements such as "Last updated" or similar phrases.
+        10. Keep the document clean without any headers or footers unless they are explicitly part of the original template.
         ` ,
       } 
     );

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Wand2, Eye, Code, Clipboard, ClipboardCheck, FileText, Loader2 } from 'lucide-react';
+import { Wand2, Eye, Code, Clipboard, ClipboardCheck, FileText, Loader2, CreditCard, Save } from 'lucide-react';
 import { Textarea } from "@/components/ui/textarea";
 import * as diffLib from 'diff';
 import ResumeAssistant from './ResumeAssistant';
@@ -28,6 +28,11 @@ interface GeneratedResumeViewProps {
   // Add props for resume selection
   uploadedResumes: Resume[];
   onSelectResumeForChat: (resume: Resume) => void;
+  // Add credit props
+  userCredits?: number;
+  // Add save resume props
+  onSaveResume?: () => void;
+  isSaving?: boolean;
 }
 
 export default function GeneratedResumeView({
@@ -47,7 +52,11 @@ export default function GeneratedResumeView({
   isChatLoading,
   onChatSubmit,
   uploadedResumes,
-  onSelectResumeForChat
+  onSelectResumeForChat,
+  userCredits,
+  // Add save resume props
+  onSaveResume,
+  isSaving = false
 }: GeneratedResumeViewProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -78,6 +87,7 @@ export default function GeneratedResumeView({
       chatInputRef.current.focus();
     }
   };
+  
   
   // Generate PDF preview when switching to preview tab
   useEffect(() => {
@@ -257,11 +267,41 @@ export default function GeneratedResumeView({
     <CardContent className="flex-1 flex flex-col p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-medium">Generated Resume</h2>
+        {userCredits !== undefined && (
+          <div className="flex items-center text-sm text-gray-600 mr-2">
+            <CreditCard className="h-4 w-4 mr-1" />
+            <span>{userCredits} credits</span>
+          </div>
+        )}
         {generatedLatex && (
-          <Button variant="outline" size="sm" className="gap-2" onClick={onDownloadPDF}>
-            <FileText className="h-4 w-4" />
-            Download PDF
-          </Button>
+          <div className='flex flex-row gap-2'>
+            {/* Add Save Resume button */}
+            {onSaveResume && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2" 
+                onClick={onSaveResume}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save Resume
+                  </>
+                )}
+              </Button>
+            )}
+            <Button variant="outline" size="sm" className="gap-2" onClick={onDownloadPDF}>
+              <FileText className="h-4 w-4" />
+              Download PDF
+            </Button>
+          </div>
         )}
       </div>
       
