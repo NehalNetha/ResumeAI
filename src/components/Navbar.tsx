@@ -92,19 +92,9 @@ const Navbar = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-  };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
-
 
   return (
     <nav 
@@ -173,10 +163,12 @@ const Navbar = () => {
               </div>
             ) : (
               <>
-                <Button variant="ghost" size="sm" className="font-medium" onClick={handleLogin}>
-                  Login
-                </Button>
-                <Link href="/#pricing">
+                <Link href="/login">
+                  <Button variant="ghost" size="sm" className="font-medium">
+                    Login
+                  </Button>
+                </Link>
+                <Link href="/signup">
                   <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white">
                     Get Started
                   </Button>
@@ -218,7 +210,6 @@ const Navbar = () => {
                         </div>
                       )}
                       
-                      {/* Display user credits in mobile view */}
                       <div className="flex items-center bg-gray-100 px-2 py-1 rounded-full" title="Available Credits">
                         <Coins size={14} className="text-yellow-500 mr-1" />
                         <span className="text-xs font-medium">{credits !== null ? credits : '...'}</span>
@@ -243,10 +234,12 @@ const Navbar = () => {
                   </>
                 ) : (
                   <>
-                    <Button variant="outline" size="sm" className="w-full font-medium" onClick={handleLogin}>
-                      Login 
-                    </Button>
-                    <Link href="/#pricing">
+                    <Link href="/login">
+                      <Button variant="outline" size="sm" className="w-full font-medium">
+                        Login
+                      </Button>
+                    </Link>
+                    <Link href="/signup">
                       <Button size="sm" className="w-full bg-blue-500 hover:bg-blue-600 text-white">
                         Get Started
                       </Button>
