@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Content } from '@google/generative-ai';
+import { createClient } from '@/utils/supabase/server';
+import { withRateLimit } from '@/utils/rate-limit-middleware';
+import { rateLimiters } from '@/utils/rate-limit';
 
 // Initialize the Google Generative AI with your API key
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
@@ -11,7 +14,20 @@ interface ChatHistoryEntry {
 }
 
 export async function POST(request: Request) {
+
+  return withRateLimit(request, rateLimiters.chat, async (req) => {
+
   try {
+
+    const supabase = await createClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
     // Destructure chatHistory along with latex, question, and selectedResume
     const { latex, question, chatHistory = [], selectedResume = null } = await request.json();
 
@@ -160,4 +176,5 @@ ${question}
       { status: 500 }
     );
   }
+});
 }

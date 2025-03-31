@@ -2,11 +2,26 @@
 // (Keep the existing code as provided in the prompt)
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-
+import { createClient } from '@/utils/supabase/server';
+import { withRateLimit } from '@/utils/rate-limit-middleware';
+import { rateLimiters } from '@/utils/rate-limit'
 // Initialize the Google Generative AI with your API key
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(request: Request) {
+  return withRateLimit(request, rateLimiters.chat, async (req) => {
+
+
+  const supabase = await createClient();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+  if (userError || !user) {
+    return NextResponse.json(
+      { error: 'Authentication required' },
+      { status: 401 }
+    );
+  }
+
   try {
     const {
       personalInfo,
@@ -37,7 +52,7 @@ export async function POST(request: Request) {
 
     // Get the generative model
     const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.0-flash',
       systemInstruction: `You are an expert resume tailoring assistant. Your task is to customize a LaTeX resume template
       based on the provided structured resume data and job description (if available). Focus on:
       1. Filling in the LaTeX template with the provided resume data
@@ -139,4 +154,5 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+});
 }

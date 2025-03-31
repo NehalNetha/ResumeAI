@@ -1,11 +1,28 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-
+import { createClient } from '@/utils/supabase/server';
+import { withRateLimit } from '@/utils/rate-limit-middleware';
+import { rateLimiters } from '@/utils/rate-limit';
 // Initialize the Google Generative AI with your API key
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export async function POST(request: Request) {
+  return withRateLimit(request, rateLimiters.chat, async (req) => {
+
   try {
+
+
+    const supabase = await createClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+
     const { resumes, template, jobDescription, resumeInfo } = await request.json();
     
     // Enhanced logging to debug the issue
@@ -176,4 +193,5 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   }
+});
 }
