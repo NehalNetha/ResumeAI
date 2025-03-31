@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Eye, LayoutTemplate, FileText, Loader2 } from 'lucide-react';
+import { Eye, LayoutTemplate, FileText, Loader2, CreditCard } from 'lucide-react';
 
 interface Template {
   id: string;
@@ -16,7 +16,9 @@ interface ResumeHeaderProps {
   setIsTemplateDialogOpen: (open: boolean) => void;
   handlePreviewResume: () => void;
   handleGenerateResume?: () => void;
-  isGenerating?: boolean; // Add isGenerating prop
+  isGenerating?: boolean; 
+  userCredits: number// Add isGenerating prop
+  isLoadingCredits?: boolean; // Add isLoadingCredits prop
 }
 
 export default function ResumeHeader({ 
@@ -24,13 +26,28 @@ export default function ResumeHeader({
   setIsTemplateDialogOpen, 
   handlePreviewResume,
   handleGenerateResume,
-  isGenerating = false
+  isGenerating = false,
+  userCredits,
+  isLoadingCredits
 }: ResumeHeaderProps) {
   return (
     <>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 px-4 sm:px-5 gap-4">
         <h1 className="text-xl sm:text-2xl font-bold">Create Your Resume</h1>
         <div className="flex flex-wrap gap-2">
+
+        <div className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-medium flex items-center">
+              <CreditCard className="h-4 w-4 mr-1" />
+              {isLoadingCredits ? (
+                <span className="flex items-center">
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  Loading...
+                </span>
+              ) : (
+                <span>{userCredits} credits</span>
+              )}
+            </div>
+            
           <Button 
             variant="outline" 
             onClick={() => setIsTemplateDialogOpen(true)} 
@@ -40,6 +57,9 @@ export default function ResumeHeader({
             <LayoutTemplate size={16} />
             {selectedTemplate ? "Change Template" : "Select Template"}
           </Button>
+
+
+       
         
           <Button 
             variant="default" 

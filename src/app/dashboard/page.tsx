@@ -31,6 +31,7 @@ import ResumeAssistant from '@/components/dashboard-comp/ResumeAssistant';
 import ResumeInfoSelector from '@/components/dashboard-comp/ResumeInfoSelector';
 import ResumeSelector from '@/components/dashboard-comp/ResumeSelector';
 import { fetchUserCredits, updateUserCredits } from '@/utils/credits';
+import { downloadPdf, generatePdfPreview } from '@/utils/pdfGeneration/pdfUtil';
 export default function Dashboard() {
   // State management
   const [uploadedResumes, setUploadedResumes] = useState<Resume[]>([]);
@@ -442,24 +443,15 @@ export default function Dashboard() {
     setIsSaving(true);
     
     try {
-      // First, generate the PDF
-      const response = await fetch('https://latex-compiler-1082803956279.asia-south1.run.app/compile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          latex_content: generatedLatex,
-          target_filename: "resume.tex"
-        }),
-      });
+      // Generate PDF blob using our utility function
+      const pdfUrl = await generatePdfPreview(generatedLatex);
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || 'Failed to generate PDF');
+      if (!pdfUrl) {
+        throw new Error('Failed to generate PDF preview');
       }
       
-      // Get the PDF as a blob
+      // Convert the URL to a blob
+      const response = await fetch(pdfUrl);
       const pdfBlob = await response.blob();
       
       // Create a filename for the saved resume
@@ -499,6 +491,9 @@ export default function Dashboard() {
         ]);
         
       if (error) throw error;
+      
+      // Clean up the URL object
+      window.URL.revokeObjectURL(pdfUrl);
       
       toast.success("Resume saved successfully!");
       
@@ -558,7 +553,7 @@ const handleChatSubmit = async () => {
     setChatQuestion('');
 
     if(userId) {
-      await updateUserCredits(userId, 1, "resume customization");
+      await updateUserCredits(userId, 1, "resume customization dashboard");
     }
     
     toast.success("Resume updated based on your request");
@@ -593,68 +588,10 @@ const handleChatSubmit = async () => {
       toast.error("No LaTeX content to compile");
       return;
     }
-
-    const downloadToast = toast.loading("Compiling PDF..."); // Show loading toast
-
-    try {
-      // Replace with your actual Cloud Run endpoint URL
-      const compileEndpoint = 'https://latex-compiler-1082803956279.asia-south1.run.app/compile';
-
-      const response = await fetch(compileEndpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          latex_content: generatedLatex,
-          target_filename: "resume.tex" // You can make this dynamic if needed
-        }),
-      });
-
-      if (!response.ok) {
-        // Try to read the error message from the plain text response
-        const errorText = await response.text();
-        console.error("PDF Compilation Error Response:", errorText);
-        toast.dismiss(downloadToast);
-        // Display the error text received from the server
-        toast.error(`Compilation failed: ${errorText.substring(0, 500)}...`); // Show first 500 chars
-        return;
-      }
-
-      // Get the PDF as a blob
-      const blob = await response.blob();
-
-      // Check if the blob is of PDF type, otherwise it might be an error response not caught above
-      if (blob.type !== 'application/pdf') {
-          console.error("Received non-PDF response:", blob.type);
-          toast.dismiss(downloadToast);
-          toast.error("Failed to compile: Server returned unexpected content type.");
-          return;
-      }
-
-      // Create a URL for the blob
-      const url = window.URL.createObjectURL(blob);
-
-      // Create a temporary anchor element to trigger download
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'resume.pdf'; // The filename for the downloaded file
-      document.body.appendChild(a);
-      a.click();
-
-      // Clean up
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      toast.dismiss(downloadToast);
-      toast.success("PDF downloaded successfully!");
-
-    } catch (error) {
-      console.error('Error downloading PDF:', error);
-      toast.dismiss(downloadToast); // Dismiss loading toast on error
-      toast.error(error instanceof Error ? `Download Error: ${error.message}` : "An unexpected error occurred during download");
-    }
+    
+    await downloadPdf(generatedLatex);
   };
+  
 
   // Add a function to handle clearing selections and generated resume
 const handleClearAll = () => {

@@ -134,6 +134,15 @@ export default function CreateResume() {
         const diff = diffLib.diffLines(originalLatex, data.modifiedLatex);
         setDiffResult(diff);
       }
+
+
+      if (userId) {
+        const updatedCredits = userCredits - 3;
+        setUserCredits(updatedCredits);
+        await updateUserCredits(userId, updatedCredits, "resume customization create-resume");
+      }
+
+     
       
       setShowDiff(true);
     
@@ -854,6 +863,8 @@ export default function CreateResume() {
         handlePreviewResume={handleGenerateResume}
         handleGenerateResume={handleGenerateResume}
         isGenerating={isGenerating}
+        isLoadingCredits={isLoadingCredits}
+        userCredits={userCredits}
       />
 
       

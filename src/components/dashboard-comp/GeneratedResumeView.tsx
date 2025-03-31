@@ -46,7 +46,6 @@ export default function GeneratedResumeView({
   setIsCopied,
   onDownloadPDF,
   onCopyLatex,
-  // Add new props for ResumeAssistant
   chatQuestion,
   setChatQuestion,
   isChatLoading,
@@ -80,9 +79,7 @@ export default function GeneratedResumeView({
   const handleResumeSelect = (resume: Resume) => {
     onSelectResumeForChat(resume);
     setShowResumePicker(false);
-    // Add a reference to the selected resume in the chat input
     setChatQuestion(`${chatQuestion} [Using resume: ${resume.name}] `);
-    // Focus back on the input
     if (chatInputRef.current) {
       chatInputRef.current.focus();
     }
@@ -91,16 +88,11 @@ export default function GeneratedResumeView({
   
   // Generate PDF preview when switching to preview tab
   useEffect(() => {
-    // Only attempt to show/generate preview if in preview mode and latex exists
     if (previewMode === 'preview' && generatedLatex) {
-      // Check if the current URL is for the current LaTeX content
       if (pdfUrl && cachedLatex === generatedLatex) {
-        // Cache hit: We already have the correct preview loaded
         setIsPreviewLoading(false);
         setPreviewError(null);
       } else {
-        // Cache miss or no URL: Need to generate a new preview
-        // If pdfUrl exists but latex is different, revoke the old URL first
         if (pdfUrl && cachedLatex !== generatedLatex) {
              URL.revokeObjectURL(pdfUrl);
              setPdfUrl(null); // Clear the state immediately
@@ -109,33 +101,27 @@ export default function GeneratedResumeView({
         generatePdfPreview();
       }
     } else if (previewMode !== 'preview') {
-        // Optional: Clear loading/error when switching away from preview tab
         setIsPreviewLoading(false);
         setPreviewError(null);
-        // Do not revoke URL here - user might switch back
     }
-    // NOTE: We don't include pdfUrl or cachedLatex in deps to avoid re-running unnecessarily
   }, [previewMode, generatedLatex]); // Re-run only when mode or latex changes
   
-  // Clean up PDF URL when component unmounts
   useEffect(() => {
     return () => {
       if (pdfUrl) {
         URL.revokeObjectURL(pdfUrl);
       }
     };
-  }, [pdfUrl]); // Depend on pdfUrl to ensure the *current* URL is revoked if it changes before unmount
+  }, [pdfUrl]);
 
   const generatePdfPreview = async () => {
     if (!generatedLatex) return;
   
     setIsPreviewLoading(true);
     setPreviewError(null);
-    // Store the latex content we are generating for, in case it changes during the async operation
     const latexToGenerateFor = generatedLatex;
   
     try {
-      // Use the compile endpoint to get PDF directly
       const response = await fetch('https://latex-compiler-1082803956279.asia-south1.run.app/compile', {
         method: 'POST',
         headers: {
@@ -156,28 +142,21 @@ export default function GeneratedResumeView({
       const blob = await response.blob();
       const newUrl = URL.createObjectURL(blob);
   
-      // Check if latex content has changed *while* we were fetching
       if (latexToGenerateFor === generatedLatex) {
-        // Revoke previous URL *before* setting the new one, if it exists
         if (pdfUrl) {
             URL.revokeObjectURL(pdfUrl);
         }
-        // Update state with the new URL and the corresponding LaTeX
         setPdfUrl(newUrl);
         setCachedLatex(latexToGenerateFor);
       } else {
-        // Latex changed during fetch - discard this result and revoke its URL
         console.warn("Latex content changed during preview generation. Discarding stale result.");
         URL.revokeObjectURL(newUrl);
-        // The main useEffect will trigger again for the *new* generatedLatex
       }
   
       } catch (error) {
         console.error('Error generating preview:', error);
-         // Only set error if the request was for the *current* latex
          if (latexToGenerateFor === generatedLatex) {
             setPreviewError(error instanceof Error ? error.message : 'Failed to generate preview');
-            // Clear potentially outdated URL if generation failed for current latex
             if (pdfUrl) {
               URL.revokeObjectURL(pdfUrl);
               setPdfUrl(null);
@@ -185,7 +164,6 @@ export default function GeneratedResumeView({
             }
          }
       } finally {
-        // Only set loading to false if the request was for the *current* latex
         if (latexToGenerateFor === generatedLatex) {
           setIsPreviewLoading(false);
         }
@@ -217,7 +195,6 @@ export default function GeneratedResumeView({
     return (
       <div className="font-mono text-xs whitespace-pre-wrap">
         {diffResult.map((part, index) => {
-          // Added lines are green, removed lines are red, unchanged are normal
           const color = part.added ? 'bg-green-100 text-green-800' : 
                       part.removed ? 'bg-red-100 text-red-800' : '';
           
@@ -237,11 +214,9 @@ export default function GeneratedResumeView({
     return (
       <div className="font-mono text-xs whitespace-pre-wrap">
         {diffResult.map((part, index) => {
-          // Added lines are green, removed lines are red, unchanged are normal
           const color = part.added ? 'bg-green-100 text-green-800' : 
                       part.removed ? 'bg-red-100 text-red-800' : '';
           
-          // Add line prefix to indicate added/removed
           const lines = part.value.split('\n').filter(line => line.length > 0);
           
           return (
@@ -316,11 +291,8 @@ export default function GeneratedResumeView({
           </div>
         </div>
       ) : (
-        // Modify this container: Make it a flex column, remove overflow-hidden
         <div className="flex-1 flex flex-col bg-white border border-gray-200 rounded-lg"> {/* Removed overflow-hidden, added flex flex-col */}
-          {/* Make Tabs component itself flexible and grow */}
           <Tabs value={previewMode} onValueChange={(value) => setPreviewMode(value as 'raw' | 'preview')} className="w-full flex flex-col flex-1"> {/* Added flex flex-col flex-1 */}
-            {/* Ensure TabsList doesn't shrink */}
             <TabsList className="w-full mb-2 flex-shrink-0"> {/* Added flex-shrink-0 */}
               <TabsTrigger value="raw" className="flex-1 gap-2">
                 <Code className="h-4 w-4" />
@@ -332,7 +304,6 @@ export default function GeneratedResumeView({
               </TabsTrigger>
             </TabsList>
             
-            {/* Raw LaTeX Tab: Use relative/absolute for scrolling within flex child */}
             <TabsContent value="raw" className="relative flex-1 overflow-hidden"> {/* Added relative flex-1 overflow-hidden */}
               <Button
                 variant="outline"
@@ -360,9 +331,7 @@ export default function GeneratedResumeView({
 
             {/* Preview Tab: Make it a flex container that grows */}
             <TabsContent value="preview" className="flex-1 flex flex-col"> {/* Added flex-1 flex flex-col */}
-              {/* This div will now take the height given by flex-1 */}
               <div className="flex-1 flex items-center justify-center p-0"> {/* Added flex-1 flex */}
-                {/* Inner container to center content */}
                 <div className="w-full h-full flex items-center justify-center">
                   {isPreviewLoading ? (
                     <div className="flex flex-col items-center justify-center">
@@ -383,12 +352,10 @@ export default function GeneratedResumeView({
                       </Button>
                     </div>
                   ) : pdfUrl ? (
-                    // Increase the height of the container div and the iframe
                     <div className="w-full h-full" style={{ minHeight: '90vh' }}> 
                       <iframe 
                         src={pdfUrl} 
                         title="Resume Preview" 
-                        // Use h-full to fill parent div, keep minHeight as fallback
                         className="w-full h-full border border-gray-200 shadow-sm" 
                         style={{ minHeight: '700px' }} // Keep min-height constraint
                       />
