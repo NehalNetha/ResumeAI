@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ResumeTabs from '@/components/create-resume-comp/ResumeTabs';
 import { Textarea } from '@/components/ui/textarea';
-import { Clipboard, ClipboardCheck, Loader2 } from 'lucide-react';
+import { Clipboard, ClipboardCheck, CreditCard, Loader2, Trash, Trash2 } from 'lucide-react';
 import * as diffLib from 'diff';
+import { fetchUserCredits, updateUserCredits } from '@/utils/credits';
 
 interface Template {
   id: string;
@@ -89,6 +90,11 @@ export default function CreateResume() {
 
   const [originalLatex, setOriginalLatex] = useState<string | null>(null);
   const [diffResult, setDiffResult] = useState<diffLib.Change[]>([]);
+  const [userCredits, setUserCredits] = useState<number>(0);
+  const [isLoadingCredits, setIsLoadingCredits] = useState(false);
+
+
+ 
 
   const handleChatSubmit = async () => {
     if (!generatedLatex || !chatQuestion.trim()) {
@@ -144,6 +150,8 @@ export default function CreateResume() {
     }
   };
 
+ 
+
   const handleCopyLatex = () => {
     if (generatedLatex) {
       navigator.clipboard.writeText(generatedLatex).then(() => {
@@ -159,13 +167,30 @@ export default function CreateResume() {
   useEffect(() => {
     fetchTemplates();
     fetchUserInfo();
+    
+
   }, []);
 
   useEffect(() => {
     if (userId) {
       fetchResumeData();
+      loadUserCredits(userId)
     }
   }, [userId]);
+
+  const loadUserCredits = async (userId: string) => {
+    try {
+      setIsLoadingCredits(true);
+      const credits = await fetchUserCredits(userId);
+      setUserCredits(credits);
+    } catch (error) {
+      console.error('Error loading user credits:', error);
+    } finally {
+      setIsLoadingCredits(false);
+    }
+  };
+
+
 
   const fetchUserInfo = async () => {
     try {
@@ -227,6 +252,7 @@ export default function CreateResume() {
       setIsLoading(false);
     }
   };
+
 
   const handlePersonalInfoChange = (updatedInfo: PersonalInfo) => {
     setPersonalInfo(updatedInfo);
@@ -549,7 +575,6 @@ export default function CreateResume() {
     }
   };
 
-    // Add useEffect to save generatedLatex to sessionStorage when it changes
     useEffect(() => {
       if (generatedLatex && typeof window !== 'undefined') {
         sessionStorage.setItem('generatedLatex', generatedLatex);
@@ -625,6 +650,10 @@ export default function CreateResume() {
           })
           .eq('id', resumeId)
           .eq('user_id', userId);
+      }
+
+      if (userId) {
+        await updateUserCredits(userId, 5, "resume creation");
       }
       
       // Scroll to the preview section
@@ -827,6 +856,8 @@ export default function CreateResume() {
         isGenerating={isGenerating}
       />
 
+      
+
       {/* Main Content */}
       <main className="flex-1 p-4 sm:p-6 flex flex-col lg:flex-row gap-6">
         {/* Form Section */}
@@ -848,6 +879,8 @@ export default function CreateResume() {
               userId={userId}
             />
           </Card>
+
+      
         </div>
 
         {/* Preview Section - Only when generating or generated */}
@@ -864,13 +897,7 @@ export default function CreateResume() {
                       onClick={handleClearResume}
                       className="flex items-center gap-1"
                     >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-trash-2">
-                        <path d="M3 6h18"/>
-                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
-                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
-                        <line x1="10" x2="10" y1="11" y2="17"/>
-                        <line x1="14" x2="14" y1="11" y2="17"/>
-                      </svg>
+                      <Trash2 className="w-4 h-4 text-red-500" />
                       Clear
                     </Button>
                   )}

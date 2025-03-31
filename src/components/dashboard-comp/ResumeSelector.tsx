@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Upload, FileText } from 'lucide-react';
 import { Resume } from '@/types/resume';
@@ -26,10 +26,20 @@ export default function ResumeSelector({
 }: ResumeSelectorProps) {
   if (!visible) return null;
   
+  // Add a file input ref to programmatically trigger the file dialog
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
     if (files.length > 0) {
       onFileInput(files);
+    }
+  };
+
+  // Function to trigger file input click
+  const triggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -40,21 +50,25 @@ export default function ResumeSelector({
           <div>
             <FileText className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <p>No resumes uploaded yet</p>
-            <label htmlFor="file-upload" className="cursor-pointer mt-4 inline-block">
-              <Button variant="outline" size="sm" className="gap-2">
-                <Upload className="h-4 w-4" />
-                Upload Resume
-              </Button>
-              <input
-                id="file-upload"
-                type="file"
-                className="hidden"
-                multiple
-                accept=".pdf,.doc,.docx"
-                onChange={handleFileInput}
-                disabled={isLoading}
-              />
-            </label>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2 mt-4"
+              onClick={triggerFileInput}
+              disabled={isLoading}
+            >
+              <Upload className="h-4 w-4" />
+              Upload Resume
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              accept=".pdf,.doc,.docx"
+              onChange={handleFileInput}
+              disabled={isLoading}
+            />
           </div>
         </div>
       ) : (
@@ -98,21 +112,25 @@ export default function ResumeSelector({
             <div className="text-sm text-gray-500">
               {selectedResumes.length} resume(s) selected
             </div>
-            <label htmlFor="file-upload" className="cursor-pointer">
-              <Button variant="outline" size="sm" className="gap-2">
-                <Upload className="h-4 w-4" />
-                Upload New
-              </Button>
-              <input
-                id="file-upload"
-                type="file"
-                className="hidden"
-                multiple
-                accept=".pdf,.doc,.docx"
-                onChange={handleFileInput}
-                disabled={isLoading}
-              />
-            </label>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="gap-2"
+              onClick={triggerFileInput}
+              disabled={isLoading}
+            >
+              <Upload className="h-4 w-4" />
+              Upload New
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              multiple
+              accept=".pdf,.doc,.docx"
+              onChange={handleFileInput}
+              disabled={isLoading}
+            />
           </div>
         </>
       )}

@@ -23,13 +23,12 @@ const pricingPlans: PricingPlan[] = [
     id: 'starter',
     name: 'Starter',
     price: 0,
-    credits: 5,
+    credits: 50,
     description: 'Try out our basic features',
     features: [
       '5 free credits',
       'Basic templates',
       'Export as PDF',
-      'Limited AI suggestions'
     ],
     priceId: '', // No price ID for free plan
   },
@@ -37,14 +36,12 @@ const pricingPlans: PricingPlan[] = [
     id: 'pro',
     name: 'Pro Pack',
     price: 9.99,
-    credits: 50,
+    credits: 100,
     description: 'Perfect for active job seekers',
     features: [
       '50 credits',
       'All premium templates',
-      'Export in multiple formats',
-      'Advanced AI suggestions',
-      'Cover letter builder',
+      'Reiterate on Resume using AI',
       'Priority support'
     ],
     priceId: 'price_1R8FpzQ1y44SJwcyuRDhieij',
@@ -52,18 +49,16 @@ const pricingPlans: PricingPlan[] = [
   },
   {
     id: 'enterprise',
-    name: 'Enterprise Pack',
+    name: 'Beast Pack',
     price: 19.99,
-    credits: 120,
-    description: 'Best value for professionals',
+    credits: 300,
+    description: 'Best value',
     features: [
-      '120 credits (20% bonus)',
+      '300',
       'All premium templates',
-      'Export in multiple formats',
-      'Advanced AI suggestions',
+      'Reiterate infintie times ',
       'Cover letter builder',
       'Priority support',
-      'Dedicated account manager'
     ],
     priceId: 'price_0987654321',
   }
@@ -208,11 +203,11 @@ const Pricing = () => {
           <div className="max-w-3xl mx-auto text-gray-600">
             <p>Credits are used for various actions in our platform:</p>
             <ul className="mt-4 space-y-2 text-left max-w-md mx-auto">
-              <li>• Creating a new resume: 2 credits</li>
+              <li>• Creating a new resume: 5 credits</li>
               <li>• AI-powered resume optimization: 3 credits</li>
               <li>• Generating a cover letter: 5 credits</li>
-              <li>• Exporting to premium formats: 1 credit</li>
-              <li>• Accessing premium templates: 2 credits</li>
+              <li>• Exporting to formats: 5 credit</li>
+              <li>• Accessing premium templates: 5 credits</li>
             </ul>
             <p className="mt-6">Credits never expire, so you can use them whenever you need!</p>
           </div>

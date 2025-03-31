@@ -30,6 +30,7 @@ import GeneratedResumeView from '@/components/dashboard-comp/GeneratedResumeView
 import ResumeAssistant from '@/components/dashboard-comp/ResumeAssistant';
 import ResumeInfoSelector from '@/components/dashboard-comp/ResumeInfoSelector';
 import ResumeSelector from '@/components/dashboard-comp/ResumeSelector';
+import { fetchUserCredits, updateUserCredits } from '@/utils/credits';
 export default function Dashboard() {
   // State management
   const [uploadedResumes, setUploadedResumes] = useState<Resume[]>([]);
@@ -238,68 +239,10 @@ export default function Dashboard() {
   };
   
   // Add a function to fetch user credits
-  const fetchUserCredits = async (userId: string) => {
-    try {
-      setIsLoadingCredits(true);
-      const { data, error } = await supabase
-        .from('user_credits')
-        .select('credits')
-        .eq('user_id', userId)
-        .single();
-        
-      if (error) {
-        console.error('Error fetching user credits:', error);
-        toast.error("Failed to load credit information");
-      } else if (data) {
-        setUserCredits(data.credits);
-      }
-    } catch (error) {
-      console.error('Error fetching user credits:', error);
-    } finally {
-      setIsLoadingCredits(false);
-    }
-  };
+
   
   // Add a function to update user credits
-  const updateUserCredits = async (amount: number) => {
-    if (!userId) return;
-    
-    try {
-      // First, update the local state optimistically
-      const newCredits = userCredits - amount;
-      setUserCredits(newCredits);
-      
-      // Then update in the database
-      const { error } = await supabase
-        .from('user_credits')
-        .update({ credits: newCredits })
-        .eq('user_id', userId);
-        
-      if (error) {
-        throw error;
-      }
-      
-      // Record the transaction in credits_history
-      const { error: historyError } = await supabase
-        .from('credits_history')
-        .insert([{
-          user_id: userId,
-          amount: -amount, // Negative amount for consumption
-          description: 'Resume generation',
-          transaction_type: 'consumption'
-        }]);
-        
-      if (historyError) {
-        console.error('Error recording credit history:', historyError);
-      }
-      
-    } catch (error) {
-      console.error('Error updating user credits:', error);
-      toast.error("Failed to update credits");
-      // Revert the optimistic update
-      fetchUserCredits(userId);
-    }
-  };
+ 
   
   const handleGenerateResume = async () => {
     if (!selectedTemplate || (selectedResumes.length === 0 && !selectedResumeInfo) || !jobDescription.trim()) {
@@ -384,7 +327,9 @@ export default function Dashboard() {
       setOriginalLatex(templateWithLatex.latex_content || '');
       
       // Deduct 5 credits after successful generation
-      await updateUserCredits(5);
+      if (userId) {
+        await updateUserCredits(userId, 5, "resume generation");
+      }
       
       toast.success("Resume template customized successfully! (5 credits used)");
       
@@ -597,6 +542,8 @@ const handleChatSubmit = async () => {
     }
     
     const data = await response.json();
+
+    
     
     // Update the LaTeX with the modified version
     setGeneratedLatex(data.modifiedLatex);
@@ -609,8 +556,14 @@ const handleChatSubmit = async () => {
     
     // Clear the chat input
     setChatQuestion('');
+
+    if(userId) {
+      await updateUserCredits(userId, 1, "resume customization");
+    }
     
     toast.success("Resume updated based on your request");
+
+    
     
   } catch (error) {
     console.error('Error processing chat:', error);
