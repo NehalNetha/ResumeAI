@@ -37,19 +37,20 @@ const FAQ = () => {
   const faqItems = [
     {
       question: "Can I edit my resume after downloading?",
-      answer: "Yes! Once you download your resume, you can edit it anytime using your preferred document editor. You can also come back to our platform to make adjustments and generate a new version."
+      answer: "Yes! Once you download your resume, you can edit it anytime using latex, and can compile it using overleaf or any other latex. You can also come back to our platform to make adjustments and generate a new version."
     },
     {
       question: "How does AI improve my resume?",
-      answer: "Our AI analyzes your experience and skills to suggest improvements, optimize for ATS systems, and highlight your strengths. It helps with phrasing, formatting, and ensuring your resume stands out to recruiters."
-    },
-    {
-      question: "Is my data secure?",
-      answer: "Absolutely. We take data security seriously and use industry-standard encryption to protect your information. Your data is never shared with third parties without your consent, and you can request deletion at any time."
+      answer: "Our AI system is designed to cater towards the job description you're applying for. It analyzes the job requirements and highlights your relevant skills and experiences, ensuring your resume is tailored to increase your chances of getting noticed by the hiring manager."
     },
     {
       question: "What file formats can I download my resume in?",
-      answer: "We offer multiple download formats including PDF, DOCX (Microsoft Word), and plain text. PDF is recommended for maintaining formatting across all devices and platforms."
+      answer: "We offer multiple download formats including PDF, or tex file"
+    },
+    {
+      question: "What file formats can I download my resume in?",
+      answer: "We offer multiple download formats including PDF, or tex file"
+
     }
   ];
 

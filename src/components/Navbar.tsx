@@ -152,11 +152,11 @@ const Navbar = () => {
                     className="w-8 h-8 rounded-full"
                   />
                 )}
-                <Button variant="ghost" size="sm" className="font-medium" onClick={handleLogout}>
+                <Button variant="ghost" size="sm" className="font-medium cursor-pointer" onClick={handleLogout}>
                   Logout
                 </Button>
                 <Link href="/dashboard">
-                  <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white">
+                  <Button size="sm" className="bg-blue-500 hover:bg-blue-600 cursor-pointer text-white">
                     Dashboard
                   </Button>
                 </Link>

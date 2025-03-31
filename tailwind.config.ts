@@ -1,8 +1,7 @@
 
 import type { Config } from "tailwindcss";
-
 export default {
-	darkMode: ["class"],
+	darkMode: "class",
 	content: [
 		"./pages/**/*.{ts,tsx}",
 		"./components/**/*.{ts,tsx}",
@@ -127,9 +126,10 @@ export default {
 				'pulse-light': 'pulse-light 3s ease-in-out infinite'
 			},
 			fontFamily: {
-				sans: ['Inter', 'sans-serif'],
-				display: ['Plus Jakarta Sans', 'sans-serif']
-			}
+				quicksand: ['var(--font-quicksand)'],
+				'geist-sans': ['var(--font-geist-sans)'],
+				'geist-mono': ['var(--font-geist-mono)'],
+			  },
 		}
 	},
 	plugins: [require("tailwindcss-animate")],
