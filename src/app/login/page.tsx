@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [verificationNeeded, setVerificationNeeded] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   
   const router = useRouter();
   const supabase = createClient();
@@ -35,9 +36,10 @@ export default function LoginPage() {
   
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
     
     if (!email || !password) {
-      toast.error("Please enter both email and password");
+      setErrorMessage("Please enter both email and password");
       return;
     }
     
@@ -50,13 +52,21 @@ export default function LoginPage() {
       });
       
       if (error) {
-        // Check if the error is due to email not being confirmed
-        if (error.message.includes('Email not confirmed') || 
-            error.message.includes('Invalid login credentials')) {
+        // Check if the error is specifically about email not being confirmed
+        if (error.message.includes('Email not confirmed')) {
           setVerificationNeeded(true);
-          throw new Error('Email not verified. Please check your inbox for the verification email.');
+          return;
         }
-        throw error;
+        
+        // For invalid credentials, set error message
+        if (error.message.includes('Invalid login credentials')) {
+          setErrorMessage('Account not found. Please check your credentials or sign up for a new account.');
+          return;
+        }
+        
+        // For other errors
+        setErrorMessage(error.message || "Failed to log in");
+        return;
       }
       
       toast.success("Logged in successfully");
@@ -64,7 +74,7 @@ export default function LoginPage() {
       
     } catch (error: any) {
       console.error('Login error:', error);
-      toast.error(error.message || "Failed to log in");
+      setErrorMessage(error.message || "Failed to log in");
     } finally {
       setIsLoading(false);
     }
@@ -145,6 +155,22 @@ export default function LoginPage() {
         </div>
       ) : (
         <>
+          {errorMessage && (
+            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 p-4 rounded-md flex items-start">
+              <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+              <div>
+                <p>{errorMessage}</p>
+                {errorMessage.includes("Account not found") && (
+                  <Link href="/signup">
+                    <Button variant="link" className="p-0 h-auto text-red-700 font-medium mt-1">
+                      Sign up for a new account
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+          
           <form onSubmit={handleEmailLogin} className="space-y-4 w-full">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>

@@ -64,12 +64,19 @@ export default function ResumeUpload() {
     setIsLoading(true);
     
     try {
+      // Get the current user
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+      
       for (const file of files) {
         // Generate a unique filename to prevent overwriting
         const fileExt = file.name.split('.').pop();
         const originalName = file.name;
         const fileName = `${uuidv4()}_${originalName}`;
-        const filePath = `${fileName}`;
+        const filePath = `${user.id}/${fileName}`; // Store in user-specific folder
         
         // Upload file to Supabase using the 'resumes' bucket directly
         const { error: uploadError } = await supabase
@@ -121,13 +128,21 @@ const fetchResumes = async () => {
   try {
     setIsLoading(true);
     
+    // First get the current user
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+    
     // Use the correct bucket name
     const bucketName = 'resumes';
     
+    // List files in the user's folder
     const { data, error } = await supabase
       .storage
-      .from("resumes")
-      .list();
+      .from(bucketName)
+      .list(`${user.id}`); // List only files in the user's folder
       
     if (error) {
       throw error;
@@ -139,7 +154,7 @@ const fetchResumes = async () => {
           const { data: urlData } = await supabase
             .storage
             .from(bucketName)
-            .createSignedUrl(file.name, 60 * 60 * 24);
+            .createSignedUrl(`${user.id}/${file.name}`, 60 * 60 * 24);
           
           // Extract original filename from the storage filename
           // Format is: {uuid}_{originalName}
@@ -153,7 +168,7 @@ const fetchResumes = async () => {
             date: new Date(file.created_at).toISOString().split('T')[0],
             size: `${(file.metadata.size / (1024 * 1024)).toFixed(1)} MB`,
             thumbnail: "", // We'll use icons instead of thumbnails
-            path: file.name,
+            path: `${user.id}/${file.name}`, // Include user ID in path
             url: urlData?.signedUrl
           };
         })

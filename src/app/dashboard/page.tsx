@@ -155,10 +155,18 @@ export default function Dashboard() {
     try {
       setIsLoading(true);
       
+      // First get the current user
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+      
+      // List files in the user's folder
       const { data, error } = await supabase
         .storage
         .from("resumes")
-        .list();
+        .list(`${user.id}`); // List only files in the user's folder
         
       if (error) {
         throw error;
@@ -170,7 +178,7 @@ export default function Dashboard() {
             const { data: urlData } = await supabase
               .storage
               .from('resumes')
-              .createSignedUrl(file.name, 60 * 60 * 24);
+              .createSignedUrl(`${user.id}/${file.name}`, 60 * 60 * 24);
               
             const originalName = file.name.includes('_') 
               ? file.name.substring(file.name.indexOf('_') + 1) 
@@ -181,7 +189,7 @@ export default function Dashboard() {
               name: originalName,
               date: new Date(file.created_at).toISOString().split('T')[0],
               size: `${(file.metadata.size / (1024 * 1024)).toFixed(1)} MB`,
-              path: file.name,
+              path: `${user.id}/${file.name}`, // Include user ID in path
               url: urlData?.signedUrl
             };
           })
@@ -407,6 +415,13 @@ export default function Dashboard() {
     setIsLoading(true);
     
     try {
+      // Get the current user
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+      
       const newResumes: Resume[] = [];
       
       for (const file of files) {
@@ -414,7 +429,7 @@ export default function Dashboard() {
         const fileExt = file.name.split('.').pop();
         const originalName = file.name;
         const storageFileName = `${uuidv4()}_${originalName}`;
-        const filePath = `${storageFileName}`;
+        const filePath = `${user.id}/${storageFileName}`; // Store in user-specific folder
         
         const { error: uploadError } = await supabase
           .storage
@@ -746,7 +761,7 @@ const handleClearAll = () => {
           </div>
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-auto lg:h-[calc(100vh-150px)]">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-auto lg:h-[calc(100vh-50px)]">
           {/* Left side - Job Description and Selection */}
           <div className="flex flex-col space-y-4">
             <Card className="flex flex-col overflow-hidden">
