@@ -1,6 +1,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
+import { Toaster } from "sonner";
 
 export default async function Layout({ children }: { children: React.ReactNode }) {
   // Create a Supabase client
@@ -14,5 +15,9 @@ export default async function Layout({ children }: { children: React.ReactNode }
     redirect('/login?redirectedFrom=/dashboard');
   }
   
-  return <DashboardLayout>{children}</DashboardLayout>;
+  return <DashboardLayout>
+    {children}
+    <Toaster />
+
+  </DashboardLayout>;
 }

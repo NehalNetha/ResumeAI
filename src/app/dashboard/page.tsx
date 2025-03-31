@@ -309,7 +309,19 @@ export default function Dashboard() {
     
     // Check if user has enough credits
     if (userCredits < 5) {
-      toast.error("You don't have enough credits. Each resume generation requires 5 credits.");
+      toast.error(
+        <div className="flex flex-col gap-2">
+          <p>You don't have enough credits. Generation requires 5 credits.</p>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => window.location.href = '/pricing'}
+            className="mt-2"
+          >
+            Get More Credits
+          </Button>
+        </div>
+      );
       return;
     }
     
