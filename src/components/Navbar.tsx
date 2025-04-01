@@ -37,25 +37,7 @@ const Navbar = () => {
       setUser(session?.user ?? null);
       
       // If user is logged in, check subscription status and credits
-      if (session?.user) {
-        const { data: subscription } = await supabase
-          .from('user_subscriptions')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .eq('status', 'active')
-          .single();
-          
-        setIsPremium(!!subscription);
-        
-        // Fetch user credits
-        const { data: userCredits } = await supabase
-          .from('user_credits')
-          .select('credits')
-          .eq('user_id', session.user.id)
-          .single();
-          
-        setCredits(userCredits?.credits || 0);
-      }
+      
     };
 
     getSession();
@@ -64,29 +46,7 @@ const Navbar = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
       
-      // Check subscription status and credits when auth state changes
-      if (session?.user) {
-        const { data: subscription } = await supabase
-          .from('user_subscriptions')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .eq('status', 'active')
-          .single();
-          
-        setIsPremium(!!subscription);
-        
-        // Fetch user credits
-        const { data: userCredits } = await supabase
-          .from('user_credits')
-          .select('credits')
-          .eq('user_id', session.user.id)
-          .single();
-          
-        setCredits(userCredits?.credits || 0);
-      } else {
-        setIsPremium(false);
-        setCredits(null);
-      }
+     
     });
 
     return () => subscription.unsubscribe();

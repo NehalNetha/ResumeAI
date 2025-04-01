@@ -136,7 +136,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             />
             <SidebarItem 
               icon={<Users size={20} />} 
-              title="Template" 
+              title="Templates" 
               href="/dashboard/templates" 
               isActive={pathname === '/dashboard/templates'}
               collapsed={isCollapsed}
