@@ -7,14 +7,14 @@ import { createClient } from '@/utils/supabase/client';
 import { User } from '@supabase/auth-js';
 import Image from 'next/image';
 import Link from 'next/link';
+import { fetchUserCredits } from '@/utils/credits';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [isPremium, setIsPremium] = useState(false);
-  const [credits, setCredits] = useState<number | null>(null);
-
+  const [userCredits, setUserCredits] = useState<number>(0);
+  const [isLoadingCredits, setIsLoadingCredits] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -30,27 +30,44 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  const loadUserCredits = async (userId: string) => {
+    try {
+      setIsLoadingCredits(true);
+      const credits = await fetchUserCredits(userId);
+      setUserCredits(credits);
+    } catch (error) {
+      console.error('Error loading user credits:', error);
+    } finally {
+      setIsLoadingCredits(false);
+    }
+  };
+
+
+  const fetchUserInfo = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setUser(user ?? null);
+      ;
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    }
+  };
+
+
   useEffect(() => {
-    // Check current session
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
-      
-      // If user is logged in, check subscription status and credits
-      
-    };
+    
+    fetchUserInfo();
 
-    getSession();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null);
-      
-     
-    });
-
-    return () => subscription.unsubscribe();
+   
   }, []);
+
+
+  useEffect(() => {
+    if (user?.id) {
+      loadUserCredits(user.id)
+    }
+  }, [user?.id]);
+
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -92,17 +109,12 @@ const Navbar = () => {
          <div className="hidden md:flex items-center space-x-4">
             {user ? (
               <div className="flex items-center space-x-3">
-                {isPremium && (
-                  <div className="flex items-center text-yellow-500" title="Premium Member">
-                    <Crown size={16} className="mr-1" />
-                    <span className="text-xs font-medium">Premium</span>
-                  </div>
-                )}
+                
                 
                 {/* Display user credits */}
                 <div className="flex items-center bg-gray-100 px-2 py-1 rounded-full" title="Available Credits">
                   <Coins size={14} className="text-yellow-500 mr-1" />
-                  <span className="text-xs font-medium">{credits !== null ? credits : '...'}</span>
+                  <span className="text-xs font-medium">{userCredits !== null ? userCredits : '...'}</span>
                 </div>
                 
                 {user.user_metadata?.avatar_url && (
@@ -163,16 +175,11 @@ const Navbar = () => {
                 {user ? (
                   <>
                     <div className="flex items-center space-x-2 mb-2">
-                      {isPremium && (
-                        <div className="flex items-center text-yellow-500 mr-2" title="Premium Member">
-                          <Crown size={16} className="mr-1" />
-                          <span className="text-xs font-medium">Premium</span>
-                        </div>
-                      )}
+                   
                       
                       <div className="flex items-center bg-gray-100 px-2 py-1 rounded-full" title="Available Credits">
                         <Coins size={14} className="text-yellow-500 mr-1" />
-                        <span className="text-xs font-medium">{credits !== null ? credits : '...'}</span>
+                        <span className="text-xs font-medium">{userCredits !== null ? userCredits : '...'}</span>
                       </div>
                       
                       {user.user_metadata?.avatar_url && (
