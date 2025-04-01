@@ -106,7 +106,7 @@ export default function SkillsTab({
                       <div 
                         key={i} 
                         className={`w-2 h-2 rounded-full mx-0.5 ${
-                          i < skill.level ? 'bg-blue-500' : 'bg-gray-200'
+                          i < (skill.level ? parseInt(skill.level) : 0) ? 'bg-blue-500' : 'bg-gray-200'
                         }`}
                       />
                     ))}
