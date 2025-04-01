@@ -75,11 +75,8 @@ export default function Dashboard() {
   const [isSaving, setIsSaving] = useState(false);
   const supabase = createClient();
   
-  // Load data from session storage on initial render
   useEffect(() => {
-    // Only run on client side
     if (typeof window !== 'undefined') {
-      // Retrieve data from session storage
       const storedJobDescription = sessionStorage.getItem('jobDescription');
       const storedSelectedTemplate = sessionStorage.getItem('selectedTemplate');
       const storedSelectedResumes = sessionStorage.getItem('selectedResumes');
@@ -103,7 +100,21 @@ export default function Dashboard() {
     fetchResumes();
     fetchTemplates();
     fetchUserId();
+    
   }, []);
+
+
+  const loadUserCredits = async (userId: string) => {
+    try {
+      setIsLoadingCredits(true);
+      const credits = await fetchUserCredits(userId);
+      setUserCredits(credits);
+    } catch (error) {
+      console.error('Error loading user credits:', error);
+    } finally {
+      setIsLoadingCredits(false);
+    }
+  }; 
   
   // Save data to session storage when it changes
   useEffect(() => {
@@ -232,7 +243,7 @@ export default function Dashboard() {
       if (user) {
         setUserId(user.id);
         fetchResumeInfos(user.id);
-        fetchUserCredits(user.id); // Add this line to fetch credits
+        loadUserCredits(user.id) // Add this line to fetch credits
       }
     } catch (error) {
       console.error('Error fetching user:', error);

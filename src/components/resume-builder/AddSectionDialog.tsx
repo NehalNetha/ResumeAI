@@ -273,9 +273,9 @@ export default function AddSectionDialog({
                         key={level}
                         type="button"
                         className={`w-8 h-8 rounded-full mx-1 flex items-center justify-center ${
-                          level <= newSkill.level ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
+                          level <= (newSkill.level ? parseInt(newSkill.level, 10) : 0) ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
                         }`}
-                        onClick={() => setNewSkill(prev => ({ ...prev, level }))}
+                        onClick={() => setNewSkill(prev => ({ ...prev, level: level.toString() }))}
                       >
                         {level}
                       </button>
