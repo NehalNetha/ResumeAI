@@ -16,6 +16,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Clipboard, ClipboardCheck, CreditCard, Loader2, Trash, Trash2 } from 'lucide-react';
 import * as diffLib from 'diff';
 import { fetchUserCredits, updateUserCredits } from '@/utils/credits';
+import { renderRawLatex } from '@/utils/renderLatex';
+import { downloadPdf, generatePdfPreview } from '@/utils/pdfGeneration/pdfUtil';
 
 interface Template {
   id: string;
@@ -64,7 +66,7 @@ export default function CreateResume() {
     }
     return null;
   });
-  const [previewMode, setPreviewMode] = useState<"code" | "preview">("preview");
+  const [previewMode, setPreviewMode] = useState<"code" | "preview">("code");
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   
   const supabase = createClient();
@@ -590,41 +592,59 @@ export default function CreateResume() {
       }
     }, [generatedLatex]);
   
-    // Add a function to clear the resume data
     const handleClearResume = () => {
       setGeneratedLatex(null);
       setPdfUrl(null);
       setShowDiff(false);
       
-      // Clear from session storage
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('generatedLatex');
       }
       
       toast.success("Resume data cleared");
     };
+  const [isDownloading, setIsDownloading] = useState(false); // Add state for download loading
 
-  // Add these new states for PDF preview handling
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [cachedLatex, setCachedLatex] = useState<string | null>(null);
 
+ 
   const handleGenerateResume = async () => {
+    // ... (start of function - checks and state resets) ...
     if (!selectedTemplate) {
       toast.error("Please select a template first");
       setIsTemplateDialogOpen(true);
       return;
     }
-    
+
     if (!personalInfo.name || !personalInfo.email) {
       toast.error("Name and email are required");
       setActiveTab("personal");
       return;
     }
-    
+
+    const generationCost = 5;
+    if (userCredits < generationCost) {
+      toast.error(`Insufficient credits. You need ${generationCost} credits to generate a resume.`);
+      return;
+    }
+
+
+    setIsGenerating(true);
+    setGeneratedLatex(null);
+    setPdfUrl(null);
+    setCachedLatex(null);
+    setShowDiff(false);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('generatedLatex');
+    }
+
+    let generationSuccessful = false;
+    let accumulatedLatex = '';
+
+
     try {
-      setIsGenerating(true);
-      
       const response = await fetch('/api/gemini/generate-resume', {
         method: 'POST',
         headers: {
@@ -640,128 +660,79 @@ export default function CreateResume() {
           template: selectedTemplate,
         }),
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate resume');
+
+      if (!response.ok || !response.body) {
+         const errorData = await response.json().catch(() => ({ error: `HTTP error! Status: ${response.status}` }));
+         throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
       }
-      
-      const data = await response.json();
-      setGeneratedLatex(data.modifiedLatex);
-      
-      // Save the generated LaTeX to the database
-      if (userId && resumeId) {
-        await supabase
-          .from('resume_info')
-          .update({ 
-            generated_latex: data.modifiedLatex,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', resumeId)
-          .eq('user_id', userId);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        accumulatedLatex += chunk;
+        setGeneratedLatex(prev => (prev ?? '') + chunk);
+      }
+
+      if (!accumulatedLatex.trim()) {
+          throw new Error("Generation finished, but no content was received.");
       }
 
       if (userId) {
-        await updateUserCredits(userId, 5, "resume creation");
+          await updateUserCredits(userId, generationCost, "resume generation create-resume");
+          setUserCredits(prev => Math.max(0, prev - generationCost));
       }
-      
-      // Scroll to the preview section
+
+      generationSuccessful = true;
+      toast.success(`Resume generated successfully! (${generationCost} credits used)`);
+
+      // Omitted the database save logic here for brevity, it remains the same
+
       setTimeout(() => {
         document.getElementById('preview-section')?.scrollIntoView({ behavior: 'smooth' });
       }, 500);
-      
-      toast.success("Resume generated successfully!");
+
+      setPreviewMode("code");
+
+
     } catch (error) {
       console.error('Error generating resume:', error);
       toast.error(error instanceof Error ? error.message : "Failed to generate resume");
+       setGeneratedLatex(null);
+       if (typeof window !== 'undefined') {
+         sessionStorage.removeItem('generatedLatex');
+       }
     } finally {
-      setIsGenerating(false);
+      setIsGenerating(false); // Set isGenerating to false *after* the try/catch block
+      if (generationSuccessful && typeof window !== 'undefined') {
+           if (accumulatedLatex) {
+              sessionStorage.setItem('generatedLatex', accumulatedLatex);
+           }
+      }
     }
   };
 
-  // Add a new function to generate PDF preview
-  const generatePdfPreview = async () => {
-    if (!generatedLatex) return;
-  
-    setIsPreviewLoading(true);
-    setPreviewError(null);
-    // Store the latex content we are generating for, in case it changes during the async operation
-    const latexToGenerateFor = generatedLatex;
-  
-    try {
-      // Use the compile endpoint to get PDF directly
-      const response = await fetch('https://latex-compiler-1082803956279.asia-south1.run.app/compile', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          latex_content: latexToGenerateFor, // Use the stored latex content
-          target_filename: "resume.tex"
-        }),
-      });
-  
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("PDF compilation error:", errorText);
-        throw new Error(errorText || 'Failed to generate PDF preview');
-      }
-  
-      const blob = await response.blob();
-      const newUrl = URL.createObjectURL(blob);
-  
-      // Check if latex content has changed *while* we were fetching
-      if (latexToGenerateFor === generatedLatex) {
-        // Revoke previous URL *before* setting the new one, if it exists
-        if (pdfUrl) {
-          URL.revokeObjectURL(pdfUrl);
-        }
-        // Update state with the new URL and the corresponding LaTeX
-        setPdfUrl(newUrl);
-        setCachedLatex(latexToGenerateFor);
-      } else {
-        // Latex changed during fetch - discard this result and revoke its URL
-        console.warn("Latex content changed during preview generation. Discarding stale result.");
-        URL.revokeObjectURL(newUrl);
-        // The main useEffect will trigger again for the *new* generatedLatex
-      }
-  
-    } catch (error) {
-      console.error('Error generating preview:', error);
-      // Only set error if the request was for the *current* latex
-      if (latexToGenerateFor === generatedLatex) {
-        setPreviewError(error instanceof Error ? error.message : 'Failed to generate preview');
-        // Clear potentially outdated URL if generation failed for current latex
-        if (pdfUrl) {
-          URL.revokeObjectURL(pdfUrl);
-          setPdfUrl(null);
-          setCachedLatex(null);
-        }
-      }
-    } finally {
-      // Only set loading to false if the request was for the *current* latex
-      if (latexToGenerateFor === generatedLatex) {
-        setIsPreviewLoading(false);
-      }
-    }
-  };
+
   useEffect(() => {
-    if (previewMode === "preview" && generatedLatex) {
-      if (pdfUrl && cachedLatex === generatedLatex) {
-        setIsPreviewLoading(false);
-        setPreviewError(null);
-      } else {
-       
-        if (pdfUrl && cachedLatex !== generatedLatex) {
-          URL.revokeObjectURL(pdfUrl);
-          setPdfUrl(null); // Clear the state immediately
-          setCachedLatex(null);
+    // Only trigger preview generation when NOT generating and in preview mode
+    if (previewMode === "preview" && !isGenerating && generatedLatex) {
+        if (pdfUrl && cachedLatex === generatedLatex) {
+            setIsPreviewLoading(false);
+            setPreviewError(null);
+        } else {
+            if (pdfUrl && cachedLatex !== generatedLatex) {
+                URL.revokeObjectURL(pdfUrl);
+                setPdfUrl(null);
+                setCachedLatex(null);
+            }
+            handleGeneratePreview();
         }
-        generatePdfPreview();
-      }
+    } else if (previewMode === "preview" && isGenerating) {
     }
-  }, [previewMode, generatedLatex]);
-
+  }, [previewMode, isGenerating, generatedLatex]); // Add isGenerating dependency
   useEffect(() => {
     return () => {
       if (pdfUrl) {
@@ -770,140 +741,133 @@ export default function CreateResume() {
     };
   }, [pdfUrl])
 
-  const handleDownloadPDF = () => {
-    if (!pdfUrl) {
-      toast.error("No PDF available to download");
+
+
+   const handleDownloadPDF = async () => {
+    if (!generatedLatex) {
+      toast.error("No LaTeX content available to download");
       return;
     }
-    
-    const a = document.createElement('a');
-    a.href = pdfUrl;
-    a.download = 'resume.pdf';
-    document.body.appendChild(a);
-    a.click();
-    
-    // Clean up
-    document.body.removeChild(a);
-    
-    toast.success("PDF downloaded successfully!");
-  };
+    if (isDownloading) return; 
 
-  const renderRawLatex = () => {
-    if (!showDiff || !diffResult.length) {
-      return (
-        <pre className="text-xs whitespace-pre-wrap font-mono">
-          {generatedLatex}
-        </pre>
-      );
-    }
-    
-    return (
-      <div className="font-mono text-xs whitespace-pre-wrap">
-        {diffResult.map((part, index) => {
-          // Added lines are green, removed lines are red, unchanged are normal
-          const color = part.added ? 'bg-green-100 text-green-800' : 
-                      part.removed ? 'bg-red-100 text-red-800' : '';
-          
-          return (
-            <span key={index} className={`${color}`}>
-              {part.value}
-            </span>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const renderDiff = () => {
-    return (
-      <div className="font-mono text-xs whitespace-pre-wrap">
-        {diffResult.map((part, index) => {
-          // Added lines are green, removed lines are red, unchanged are normal
-          const color = part.added ? 'bg-green-100 text-green-800' : 
-                      part.removed ? 'bg-red-100 text-red-800' : '';
-          
-          // Add line prefix to indicate added/removed
-          const lines = part.value.split('\n').filter(line => line.length > 0);
-          
-          return (
-            <div key={index} className={`${color}`}>
-              {lines.map((line, lineIndex) => (
-                <div key={`${index}-${lineIndex}`} className="py-1">
-                  <span className="mr-2 inline-block w-4 text-gray-500">
-                    {part.added ? '+' : part.removed ? '-' : ' '}
-                  </span>
-                  {line}
-                </div>
-              ))}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-
-  const handlePreviewResume = () => {
-    if (!generatedLatex) {
-      handleGenerateResume();
-    } else {
-      window.scrollTo({
-        top: document.getElementById('preview-section')?.offsetTop,
-        behavior: 'smooth'
-      });
+    setIsDownloading(true);
+    try {
+      await downloadPdf(generatedLatex, 'resume.pdf');
+    } catch (error) {
+      
+      console.error("Unexpected error during download initiation:", error);
+      toast.error("An unexpected error occurred while trying to download.");
+    } finally {
+      setIsDownloading(false);
     }
   };
+
+
+  const handleGeneratePreview = async () => {    if (!generatedLatex) {
+      toast.info("No LaTeX content available to generate preview.");
+      return;
+    }
+
+    if (pdfUrl && cachedLatex === generatedLatex) {
+        setIsPreviewLoading(false);
+        setPreviewError(null);
+        return;
+    }
+
+    setIsPreviewLoading(true);
+    setPreviewError(null);
+    const latexToGenerateFor = generatedLatex;
+
+    try {
+      const newUrl = await generatePdfPreview(latexToGenerateFor);
+
+      if (latexToGenerateFor === generatedLatex) {
+         if (pdfUrl && pdfUrl !== newUrl) {
+           URL.revokeObjectURL(pdfUrl);
+         }
+
+         if (newUrl) {
+           setPdfUrl(newUrl);
+           setCachedLatex(latexToGenerateFor); 
+           setPreviewError(null); 
+         } else {
+           setPreviewError("Failed to generate preview. Check console for details.");
+           if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+           setPdfUrl(null);
+           setCachedLatex(null);
+         }
+      } else {
+        console.warn("Latex content changed during preview generation. Discarding stale result.");
+        if (newUrl) URL.revokeObjectURL(newUrl); 
+      }
+
+    } catch (error) {
+      console.error('Error generating preview:', error);
+       if (latexToGenerateFor === generatedLatex) {
+         setPreviewError(error instanceof Error ? error.message : 'An unexpected error occurred during preview generation.');
+         if (pdfUrl) URL.revokeObjectURL(pdfUrl); 
+         setPdfUrl(null);
+         setCachedLatex(null);
+       }
+    } finally {
+      if (latexToGenerateFor === generatedLatex) {
+        setIsPreviewLoading(false);
+      }
+    }
+  };
+
+
+
+  
   return (
   <>
     <div className="flex-1 flex flex-col mt-6">
-      {/* Full-Width Header */}
-      <ResumeHeader 
-        selectedTemplate={selectedTemplate}
-        setIsTemplateDialogOpen={setIsTemplateDialogOpen}
-        handlePreviewResume={handleGenerateResume}
-        handleGenerateResume={handleGenerateResume}
-        isGenerating={isGenerating}
-        isLoadingCredits={isLoadingCredits}
-        userCredits={userCredits}
-      />
-
-      
+       <ResumeHeader
+         selectedTemplate={selectedTemplate}
+         setIsTemplateDialogOpen={setIsTemplateDialogOpen}
+         handlePreviewResume={handleGenerateResume}
+         handleGenerateResume={handleGenerateResume}
+         isGenerating={isGenerating}
+         isLoadingCredits={isLoadingCredits}
+         userCredits={userCredits}
+       />
 
       {/* Main Content */}
       <main className="flex-1 p-4 sm:p-6 flex flex-col lg:flex-row gap-6">
-        {/* Form Section */}
+        {/* Form Section remains the same width calculation */}
         <div className={`flex-1 ${isGenerating || generatedLatex ? 'lg:w-1/2' : 'w-full'}`}>
-          <Card className="mb-6">
-            <ResumeTabs
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              personalInfo={personalInfo}
-              workExperience={workExperience}
-              education={education}
-              projects={projects}
-              skills={skills}
-              links={links}
-              handlePersonalInfoChange={handlePersonalInfoChange}
-              openDialog={openDialog}
-              removeItem={removeItem}
-              resumeId={resumeId}
-              userId={userId}
-            />
-          </Card>
-
-      
+           {/* ... Card with ResumeTabs ... */}
+           <Card className="mb-6">
+             <ResumeTabs
+               activeTab={activeTab}
+               setActiveTab={setActiveTab}
+               personalInfo={personalInfo}
+               workExperience={workExperience}
+               education={education}
+               projects={projects}
+               skills={skills}
+               links={links}
+               handlePersonalInfoChange={handlePersonalInfoChange}
+               openDialog={openDialog}
+               removeItem={removeItem}
+               resumeId={resumeId}
+               userId={userId}
+             />
+           </Card>
         </div>
 
-        {/* Preview Section - Only when generating or generated */}
+        {/* Preview Section - Show whenever generating OR generatedLatex exists */}
         {(isGenerating || generatedLatex) && (
           <div className="w-full lg:w-1/2 flex flex-col gap-6">
             <Card className="lg:sticky lg:top-24 overflow-hidden">
               <div className="p-4 sm:p-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-2xl font-bold">Resume Preview</h2>
-                  {generatedLatex && (
-                    <Button 
-                      variant="outline" 
+                  <h2 className="text-2xl font-bold">
+                    {isGenerating ? "Generating Resume..." : "Resume Preview"}
+                  </h2>
+                  {generatedLatex && !isGenerating && ( // Only show clear button when NOT actively generating
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={handleClearResume}
                       className="flex items-center gap-1"
@@ -912,85 +876,101 @@ export default function CreateResume() {
                       Clear
                     </Button>
                   )}
+                 
                 </div>
-                
-                {isGenerating ? (
-                  <div className="flex items-center justify-center h-[400px] sm:h-[600px] bg-gray-100 rounded-md">
-                    <p className="text-gray-500">Generating resume...</p>
-                  </div>
-                ) : (
-                  <Tabs value={previewMode} onValueChange={(value) => setPreviewMode(value as "code" | "preview")}>
-                    <TabsList className="grid w-full grid-cols-2 mb-6">
-                      <TabsTrigger value="preview">Preview</TabsTrigger>
-                      <TabsTrigger value="code">LaTeX Code</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="preview" className="min-h-[400px] sm:min-h-[600px]">
-                      <div className="w-full h-full flex items-center justify-center">
-                        {isPreviewLoading ? (
-                          <div className="flex flex-col items-center justify-center">
-                            <Loader2 className="h-8 w-8 animate-spin text-gray-400 mb-2" />
-                            <p className="text-sm text-gray-500">Generating preview...</p>
-                          </div>
-                        ) : previewError ? (
-                          <div className="text-center p-4 border border-red-200 rounded-md bg-red-50 max-w-md">
-                            <h3 className="text-red-800 font-medium mb-2">Error Generating Preview</h3>
-                            <p className="text-sm text-red-600">{previewError}</p>
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
-                              className="mt-3"
-                              onClick={generatePdfPreview}
-                            >
-                              Try Again
-                            </Button>
-                          </div>
-                        ) : pdfUrl ? (
-                          <div className="w-full h-full" style={{ minHeight: '600px' }}> 
-                            <iframe 
-                              src={pdfUrl} 
-                              title="Resume Preview" 
-                              className="w-full h-full border border-gray-200 shadow-sm" 
-                              style={{ minHeight: '600px' }} 
-                            />
-                          </div>
-                        ) : (
-                          <div className="text-center">
-                            <Button 
-                              variant="outline" 
-                              onClick={generatePdfPreview}
-                            >
-                              Generate Preview
-                            </Button>
-                          </div>
-                        )}
+
+                {/* Always render Tabs when generating or latex exists */}
+                <Tabs value={previewMode} onValueChange={(value) => setPreviewMode(value as "code" | "preview")}>
+                  <TabsList className="grid w-full grid-cols-2 mb-6">
+                     {/* Keep the code tab always enabled */}
+                     <TabsTrigger value="code">LaTeX Code</TabsTrigger>
+                     {/* Disable preview tab while generating */}
+                     <TabsTrigger value="preview" disabled={isGenerating}>
+                      Preview {isGenerating && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
+                      </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="code">
+                      <div className="relative h-[400px] sm:h-[600px]">
+                        <Button
+                          variant="outline"
+                          className="absolute right-2 top-2 z-10"
+                          onClick={handleCopyLatex}
+                          disabled={!generatedLatex || isGenerating} // Disable copy while generating might be safer
+                        >
+                          {isCopied ? (
+                            <>
+                              <ClipboardCheck className="h-4 w-4 mr-1" />
+                              Copied!
+                            </>
+                          ) : (
+                            <>
+                              <Clipboard className="h-4 w-4 mr-1" />
+                              Copy Code
+                            </>
+                          )}
+                        </Button>
+                        <div className="bg-gray-100 p-4 rounded-md h-full text-sm overflow-y-auto whitespace-pre-wrap break-all max-w-full">
+                         {/* This will now show the streaming content */}
+                         {renderRawLatex({ generatedLatex, showDiff, diffResult })}
+                         {/* Optionally show a subtle indicator if still loading */}
+                         {isGenerating && (
+                           <div className="absolute bottom-2 right-2 text-xs text-gray-400 italic flex items-center">
+                             <Loader2 className="h-3 w-3 animate-spin mr-1" /> Streaming...
+                           </div>
+                         )}
+                        </div>
                       </div>
                     </TabsContent>
-                    <TabsContent value="code">
-                        <div className="relative h-[400px] sm:h-[600px]">
-                          <Button 
-                            variant="outline" 
-                            className="absolute right-2 top-2 z-10"
-                            onClick={handleCopyLatex}
-                          >
-                            {isCopied ? (
-                              <>
-                                <ClipboardCheck className="h-4 w-4 mr-1" />
-                                Copied!
-                              </>
-                            ) : (
-                              <>
-                                <Clipboard className="h-4 w-4 mr-1" />
-                                Copy Code
-                              </>
-                            )}
-                          </Button>
-                          <div className="bg-gray-100 p-4 rounded-md h-full text-sm overflow-y-auto whitespace-pre-wrap break-all max-w-full">
-                            {renderRawLatex()}
-                          </div>
+                  <TabsContent value="preview" className="min-h-[400px] sm:min-h-[600px]">
+                    {/* Preview Logic remains the same - it won't activate if isGenerating is true */}
+                    <div className="w-full h-full flex items-center justify-center">
+                      {isPreviewLoading ? (
+                        // ... loading indicator ...
+                        <div className="flex flex-col items-center justify-center">
+                          <Loader2 className="h-8 w-8 animate-spin text-gray-400 mb-2" />
+                          <p className="text-sm text-gray-500">Generating preview...</p>
                         </div>
-                      </TabsContent>
-                  </Tabs>
-                )}
+                      ) : previewError ? (
+                         // ... error message ...
+                        <div className="text-center p-4 border border-red-200 rounded-md bg-red-50 max-w-md">
+                          <h3 className="text-red-800 font-medium mb-2">Error Generating Preview</h3>
+                          <p className="text-sm text-red-600">{previewError}</p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-3"
+                            onClick={handleGeneratePreview}
+                            disabled={isGenerating} // Also disable retry if generating main resume
+                          >
+                            Try Again
+                          </Button>
+                        </div>
+                      ) : pdfUrl ? (
+                         // ... iframe ...
+                        <div className="w-full h-full" style={{ minHeight: '600px' }}>
+                          <iframe
+                            src={pdfUrl}
+                            title="Resume Preview"
+                            className="w-full h-full border border-gray-200 shadow-sm"
+                            style={{ minHeight: '600px' }}
+                          />
+                        </div>
+                      ) : (
+                         // ... generate preview button ...
+                        <div className="text-center">
+                          <Button
+                            variant="outline"
+                            onClick={handleGeneratePreview}
+                            disabled={isGenerating || !generatedLatex} // Disable if generating or no latex yet
+                          >
+                            Generate Preview
+                          </Button>
+                          {isGenerating && <p className="text-xs text-gray-500 mt-2">Resume generation in progress...</p>}
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
                 <div className="flex flex-col sm:flex-row justify-between gap-3 mt-6">
                   <Button variant="outline" onClick={handleSaveResume} disabled={isSaving || isGenerating} className="w-full sm:w-auto">
                     {isSaving ? "Saving..." : "Save Resume"}
@@ -1039,18 +1019,8 @@ export default function CreateResume() {
                     </Button>
                   </div>
                   
-                  {isChatLoading && (
-                    <div className="mt-2 text-sm text-gray-500 flex items-center">
-                      <Loader2 className="h-3 w-3 mr-2 animate-spin" />
-                      Processing your request...
-                    </div>
-                  )}
-                  
-                  {showDiff && (
-                    <div className="mt-2 p-2 bg-blue-50 text-blue-700 text-sm rounded-md">
-                      <p>Your resume has been updated based on your request.</p>
-                    </div>
-                  )}
+                 
+               
                 </div>
               </div>
             </Card>

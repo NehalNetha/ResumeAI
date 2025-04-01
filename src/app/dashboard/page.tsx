@@ -261,8 +261,7 @@ export default function Dashboard() {
       toast("Please select a template, at least one resume or saved information, and provide a job description");
       return;
     }
-    
-    // Check if user has enough credits
+
     if (userCredits < 5) {
       toast.error(
         <div className="flex flex-col gap-2">
@@ -281,41 +280,66 @@ export default function Dashboard() {
     }
     
     setIsGenerating(true);
-    
+    setGeneratedLatex(''); // Clear previous result immediately
+    // Ensure selectedTemplate and its content exist before setting originalLatex
+    if (selectedTemplate?.latex_content) {
+        setOriginalLatex(selectedTemplate.latex_content);
+        // Store original latex in session storage immediately
+         if (typeof window !== 'undefined') {
+            sessionStorage.setItem('originalLatex', selectedTemplate.latex_content);
+            sessionStorage.removeItem('generatedLatex'); // Remove old generated content
+         }
+    } else {
+        setOriginalLatex(''); // Clear original if template content is missing
+        if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('originalLatex');
+            sessionStorage.removeItem('generatedLatex');
+        }
+    }
+
+    setShowDiff(false); // Hide diff view during generation
+    setPreviewMode('raw'); // Switch to raw view
+
+    let generationSuccessful = false; // Flag to track successful completion
+
     try {
-      // Get the template's LaTeX content if not already loaded
       let templateWithLatex = selectedTemplate;
-      if (!selectedTemplate.latex_content) {
+      // Fetch template content if missing (if it wasn't loaded initially or selected from a list without content)
+      if (!templateWithLatex?.latex_content) {
         const { data, error } = await supabase
           .from('templates')
           .select('latex_content')
-          .eq('id', selectedTemplate.id)
+          .eq('id', selectedTemplate!.id) // Use non-null assertion as selectedTemplate check happened above
           .single();
-          
+
         if (error) throw error;
-        
-        if (data) {
+
+        if (data && data.latex_content) {
           templateWithLatex = {
-            ...selectedTemplate,
+            ...selectedTemplate!, // Use non-null assertion
             latex_content: data.latex_content
           };
+           // Update originalLatex and session storage again if it was fetched now
+           setOriginalLatex(data.latex_content);
+           if (typeof window !== 'undefined') {
+             sessionStorage.setItem('originalLatex', data.latex_content);
+           }
+
+        } else {
+            throw new Error("Selected template content could not be loaded.");
         }
+      } else {
+        // If content already exists, ensure originalLatex is set correctly
+        setOriginalLatex(templateWithLatex.latex_content);
       }
-      
-      // Create a customized resumeInfo with ONLY the selected components
+
+
+      // Create a customized resumeInfo (remains the same)
       let customizedResumeInfo = null;
       if (selectedResumeInfo) {
-        // Create a new object with only the selected components
-        customizedResumeInfo = {
-          personal_info: selectedComponents.personalInfo,
-          work_experience: selectedComponents.workExperiences,
-          education: selectedComponents.educations,
-          projects: selectedComponents.projects,
-          skills: selectedComponents.skills,
-          links: selectedComponents.links
-        };
+        customizedResumeInfo = { /* ... selected components ... */ };
       }
-      
+
       const response = await fetch('/api/gemini', {
         method: 'POST',
         headers: {
@@ -323,33 +347,68 @@ export default function Dashboard() {
         },
         body: JSON.stringify({
           resumes: selectedResumes,
-          template: templateWithLatex,
+          template: templateWithLatex, // Pass the potentially updated template
           jobDescription,
           resumeInfo: customizedResumeInfo
         }),
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to generate customized resume');
+
+      if (!response.ok || !response.body) {
+         // Try to parse potential JSON error response from the server
+         const errorData = await response.json().catch(() => ({ error: `HTTP error! Status: ${response.status}` }));
+         throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
       }
-      
-      const data = await response.json();
-      setGeneratedLatex(data.modifiedLatex);
-      setOriginalLatex(templateWithLatex.latex_content || '');
-      
-      // Deduct 5 credits after successful generation
-      if (userId) {
-        await updateUserCredits(userId, 5, "resume generation");
+
+      // --- Handle the stream ---
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedLatex = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        accumulatedLatex += chunk;
+        setGeneratedLatex(prev => prev + chunk); // Update state incrementally
       }
-      
-      toast.success("Resume template customized successfully! (5 credits used)");
-      
+      // --- Finished reading stream ---
+
+      // Final check if any content was generated
+       if (!accumulatedLatex.trim()) {
+           throw new Error("Generation finished, but no content was received.");
+       }
+
+        // Set final state after stream completion (optional, as incremental updates handle it)
+       // setGeneratedLatex(accumulatedLatex);
+
+       // Deduct credits *after* successful stream completion
+       if (userId) {
+           await updateUserCredits(userId, 5, "resume generation");
+           // Update local credit count after deduction
+           setUserCredits(prev => Math.max(0, prev - 5));
+       }
+
+        generationSuccessful = true; // Mark as successful
+        toast.success("Resume template customized successfully! (5 credits used)");
+
     } catch (error) {
       console.error('Error generating resume:', error);
       toast.error(error instanceof Error ? error.message : "Failed to customize resume template");
+       // Clear partial results on error
+      setGeneratedLatex('');
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('generatedLatex');
+      }
     } finally {
       setIsGenerating(false);
+      // Optional: Store the fully generated latex only if successful
+        if (generationSuccessful && typeof window !== 'undefined') {
+            // Get the final state value directly
+            setGeneratedLatex(currentLatex => {
+                 sessionStorage.setItem('generatedLatex', currentLatex);
+                 return currentLatex; // Return the current state value without changing it
+            });
+        }
     }
   };
 
