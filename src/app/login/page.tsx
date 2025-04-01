@@ -10,12 +10,14 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, Mail, AlertCircle } from 'lucide-react';
 import AuthLayout from '@/components/auth/AuthLayout';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isGithubLoading, setIsGithubLoading] = useState(false); // Add this state
   const [verificationNeeded, setVerificationNeeded] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   
@@ -117,6 +119,28 @@ export default function LoginPage() {
       console.error('Google login error:', error);
       toast.error(error.message || "Failed to log in with Google");
       setIsGoogleLoading(false);
+    }
+  };
+  
+  const handleGithubSignup = async () => {
+    try {
+      setIsGithubLoading(true);
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'github',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      
+      if (error) {
+        throw error;
+      }
+      
+    } catch (error: any) {
+      console.error('GitHub login error:', error);
+      toast.error(error.message || "Failed to log in with GitHub");
+      setIsGithubLoading(false);
     }
   };
   
@@ -226,6 +250,7 @@ export default function LoginPage() {
             <Separator className="flex-1" />
           </div>
           
+          <div className=" space-y-3">
           <Button 
             variant="outline" 
             className="w-full" 
@@ -238,12 +263,45 @@ export default function LoginPage() {
                 Connecting...
               </>
             ) : (
-              <>
+              <div className='flex flex-row '>
+                <Image 
+                  src="/google.svg"
+                  alt="Google"
+                  width={20}
+                  height={20}
+                  className="mr-2"
+                />
                 Sign in with Google
-              </>
+              </div>
             )}
           </Button>
-          
+
+          <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={handleGithubSignup}
+              disabled={isGithubLoading}
+            >
+              {isGithubLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                <div className='flex flex-row '>
+                <Image 
+                  src="/github-light.svg"
+                  alt="Google"
+                  width={20}
+                  height={20}
+                  className="mr-2"
+                />
+                Sign in with Github
+              </div>
+              )}
+            </Button>
+
+          </div>
           <p className="text-sm text-gray-500 text-center mt-6">
             Don't have an account?{" "}
             <Link href="/signup" className="text-blue-500 hover:text-blue-600 font-medium">

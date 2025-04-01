@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 import { toast } from "sonner";
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 export default function SignupPage() {
   const [email, setEmail] = useState('');
@@ -204,7 +205,8 @@ export default function SignupPage() {
             <Separator className="flex-1" />
           </div>
           
-          <div className="space-y-3">
+          <div className=" space-y-3">
+
             <Button 
               variant="outline" 
               className="w-full" 
@@ -217,7 +219,16 @@ export default function SignupPage() {
                   Connecting...
                 </>
               ) : (
-                "Sign up with Google"
+                <div className='flex flex-row '>
+                <Image 
+                  src="/google.svg"
+                  alt="Google"
+                  width={20}
+                  height={20}
+                  className="mr-2"
+                />
+              Sign in with Google
+            </div>
               )}
             </Button>
             
@@ -233,7 +244,16 @@ export default function SignupPage() {
                   Connecting...
                 </>
               ) : (
-                "Sign up with GitHub"
+                <div className='flex flex-row '>
+                <Image 
+                  src="/github-light.svg"
+                  alt="Google"
+                  width={20}
+                  height={20}
+                  className="mr-2"
+                />
+                Sign in with Github
+              </div>
               )}
             </Button>
           </div>

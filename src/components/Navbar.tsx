@@ -17,6 +17,15 @@ const Navbar = () => {
   const [isLoadingCredits, setIsLoadingCredits] = useState(false);
   const supabase = createClient();
 
+  // Add smooth scroll function
+  const scrollToSection = (elementId: string) => {
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth' });
+      setIsMenuOpen(false); // Close mobile menu after clicking
+    }
+  };
+
   useEffect(() => {
     const handleScroll = () => {
       if (window.scrollY > 10) {
@@ -99,10 +108,10 @@ const Navbar = () => {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            <a href="#features" className="text-sm font-medium hover:text-blue-500 transition-colors">Features</a>
-            <a href="#templates" className="text-sm font-medium hover:text-blue-500 transition-colors">Templates</a>
-            <a href="#pricing" className="text-sm font-medium hover:text-blue-500 transition-colors">Pricing</a>
-            <a href="#faq" className="text-sm font-medium hover:text-blue-500 transition-colors">FAQ</a>
+            <button onClick={() => scrollToSection('features')} className="text-sm font-medium hover:text-blue-500 transition-colors">Features</button>
+            <button onClick={() => scrollToSection('templates')} className="text-sm font-medium hover:text-blue-500 transition-colors">Templates</button>
+            <button onClick={() => scrollToSection('pricing')} className="text-sm font-medium hover:text-blue-500 transition-colors">Pricing</button>
+            <button onClick={() => scrollToSection('faq')} className="text-sm font-medium hover:text-blue-500 transition-colors">FAQ</button>
           </div>
 
           {/* Action Buttons */}
@@ -166,10 +175,10 @@ const Navbar = () => {
         {isMenuOpen && (
           <div className="md:hidden bg-white px-4 pb-4 pt-2 border-t border-gray-100 animate-fade-in">
             <div className="flex flex-col space-y-4">
-              <a href="#features" className="text-sm font-medium hover:text-blue-500 transition-colors py-2">Features</a>
-              <a href="#templates" className="text-sm font-medium hover:text-blue-500 transition-colors py-2">Templates</a>
-              <a href="#pricing" className="text-sm font-medium hover:text-blue-500 transition-colors py-2">Pricing</a>
-              <a href="#faq" className="text-sm font-medium hover:text-blue-500 transition-colors py-2">FAQ</a>
+              <button onClick={() => scrollToSection('features')} className="text-sm font-medium hover:text-blue-500 transition-colors py-2 text-left">Features</button>
+              <button onClick={() => scrollToSection('templates')} className="text-sm font-medium hover:text-blue-500 transition-colors py-2 text-left">Templates</button>
+              <button onClick={() => scrollToSection('pricing')} className="text-sm font-medium hover:text-blue-500 transition-colors py-2 text-left">Pricing</button>
+              <button onClick={() => scrollToSection('faq')} className="text-sm font-medium hover:text-blue-500 transition-colors py-2 text-left">FAQ</button>
               
               <div className="flex flex-col space-y-3 pt-2">
                 {user ? (
