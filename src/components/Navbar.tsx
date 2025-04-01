@@ -7,7 +7,7 @@ import { createClient } from '@/utils/supabase/client';
 import { User } from '@supabase/auth-js';
 import Image from 'next/image';
 import Link from 'next/link';
-import { fetchUserCredits } from '@/utils/credits';
+import { fetchUserCredits } from '@/utils/credits/credits';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);

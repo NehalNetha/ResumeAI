@@ -30,8 +30,9 @@ import GeneratedResumeView from '@/components/dashboard-comp/GeneratedResumeView
 import ResumeAssistant from '@/components/dashboard-comp/ResumeAssistant';
 import ResumeInfoSelector from '@/components/dashboard-comp/ResumeInfoSelector';
 import ResumeSelector from '@/components/dashboard-comp/ResumeSelector';
-import { fetchUserCredits, updateUserCredits } from '@/utils/credits';
+import { fetchUserCredits, updateUserCredits } from '@/utils/credits/credits';
 import { downloadPdf, generatePdfPreview } from '@/utils/pdfGeneration/pdfUtil';
+import PricingToast from '@/components/PricingToast';
 export default function Dashboard() {
   // State management
   const [uploadedResumes, setUploadedResumes] = useState<Resume[]>([]);
@@ -264,17 +265,7 @@ export default function Dashboard() {
 
     if (userCredits < 5) {
       toast.error(
-        <div className="flex flex-col gap-2">
-          <p>You don't have enough credits. Generation requires 5 credits.</p>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => window.location.href = '/pricing'}
-            className="mt-2"
-          >
-            Get More Credits
-          </Button>
-        </div>
+        <PricingToast credits={5} />
       );
       return;
     }

@@ -15,9 +15,11 @@ import ResumeTabs from '@/components/create-resume-comp/ResumeTabs';
 import { Textarea } from '@/components/ui/textarea';
 import { Clipboard, ClipboardCheck, CreditCard, Loader2, Trash, Trash2 } from 'lucide-react';
 import * as diffLib from 'diff';
-import { fetchUserCredits, updateUserCredits } from '@/utils/credits';
-import { renderRawLatex } from '@/utils/renderLatex';
+import { fetchUserCredits, updateUserCredits } from '@/utils/credits/credits';
+import { renderRawLatex } from '@/utils/latexRender/renderLatex';
 import { downloadPdf, generatePdfPreview } from '@/utils/pdfGeneration/pdfUtil';
+import { fetchResumeDataUtil, saveFullResume, saveResumeSection } from '@/utils/createResumeServices/resumeDataService';
+import PricingToast from '@/components/PricingToast';
 
 interface Template {
   id: string;
@@ -94,7 +96,11 @@ export default function CreateResume() {
   const [diffResult, setDiffResult] = useState<diffLib.Change[]>([]);
   const [userCredits, setUserCredits] = useState<number>(0);
   const [isLoadingCredits, setIsLoadingCredits] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false); // Add state for download loading
 
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [cachedLatex, setCachedLatex] = useState<string | null>(null);
 
  
 
@@ -103,11 +109,18 @@ export default function CreateResume() {
       toast("Please generate a resume and enter a question");
       return;
     }
+
+    const generationCost = 3;
+    if (userCredits < generationCost) {
+      toast.error(
+        <PricingToast  credits={3}/>
+      );
+      return;
+    }
     
     setIsChatLoading(true);
     
     try {
-      // Save the current LaTeX as original before making changes
       setOriginalLatex(generatedLatex);
       
       const response = await fetch('/api/chat', {
@@ -172,9 +185,6 @@ export default function CreateResume() {
       });
     }
   };
-  
-  
-
   useEffect(() => {
     fetchTemplates();
     fetchUserInfo();
@@ -201,8 +211,6 @@ export default function CreateResume() {
     }
   };
 
-
-
   const fetchUserInfo = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -215,17 +223,11 @@ export default function CreateResume() {
   const fetchResumeData = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('resume_info')
-        .select('*')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false })
-        .limit(1);
-        
-      if (error) throw error;
+      if (!userId) return;
       
-      if (data && data.length > 0) {
-        const resume = data[0];
+      const resume = await fetchResumeDataUtil(userId);
+      
+      if (resume) {
         setResumeId(resume.id);
         if (resume.personal_info) setPersonalInfo(resume.personal_info);
         if (resume.work_experience) setWorkExperience(resume.work_experience);
@@ -240,16 +242,13 @@ export default function CreateResume() {
         if (resume.generated_latex) {
           setGeneratedLatex(resume.generated_latex);
         }
-        toast.success("Resume data loaded successfully");
       }
     } catch (error) {
-      console.error('Error fetching resume data:', error);
-      toast.error("Failed to load resume data");
+      console.error('Error in fetchResumeDataForUser:', error);
     } finally {
       setIsLoading(false);
     }
   };
-
   const fetchTemplates = async () => {
     try {
       setIsLoading(true);
@@ -287,25 +286,15 @@ export default function CreateResume() {
         toast("Please fill in required fields");
         return;
       }
-      setWorkExperience(prev => [...prev, newSection]);
+      const updatedWorkExperience = [...workExperience, newSection];
+      setWorkExperience(updatedWorkExperience);
       
       if (userId && resumeId) {
         try {
-          const updatedWorkExperience = [...workExperience, newSection];
-          const { error } = await supabase
-            .from('resume_info')
-            .update({ 
-              work_experience: updatedWorkExperience,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', resumeId)
-            .eq('user_id', userId);
-            
-          if (error) throw error;
+          await saveResumeSection(userId, resumeId, "work_experience", updatedWorkExperience);
           toast.success("Work experience saved to database");
         } catch (error) {
           console.error("Error saving work experience:", error);
-          toast.error("Failed to save work experience to database");
         }
       }
     } else if (dialogType === "education") {
@@ -313,25 +302,15 @@ export default function CreateResume() {
         toast("Please fill in required fields");
         return;
       }
-      setEducation(prev => [...prev, newSection]);
+      const updatedEducation = [...education, newSection];
+      setEducation(updatedEducation);
       
       if (userId && resumeId) {
         try {
-          const updatedEducation = [...education, newSection];
-          const { error } = await supabase
-            .from('resume_info')
-            .update({ 
-              education: updatedEducation,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', resumeId)
-            .eq('user_id', userId);
-            
-          if (error) throw error;
+          await saveResumeSection(userId, resumeId, "education", updatedEducation);
           toast.success("Education saved to database");
         } catch (error) {
           console.error("Error saving education:", error);
-          toast.error("Failed to save education to database");
         }
       }
     } else if (dialogType === "project") {
@@ -339,25 +318,15 @@ export default function CreateResume() {
         toast("Please fill in required fields");
         return;
       }
-      setProjects(prev => [...prev, newSection]);
+      const updatedProjects = [...projects, newSection];
+      setProjects(updatedProjects);
       
       if (userId && resumeId) {
         try {
-          const updatedProjects = [...projects, newSection];
-          const { error } = await supabase
-            .from('resume_info')
-            .update({ 
-              projects: updatedProjects,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', resumeId)
-            .eq('user_id', userId);
-            
-          if (error) throw error;
+          await saveResumeSection(userId, resumeId, "projects", updatedProjects);
           toast.success("Project saved to database");
         } catch (error) {
           console.error("Error saving project:", error);
-          toast.error("Failed to save project to database");
         }
       }
     } else if (dialogType === "skill") {
@@ -365,25 +334,15 @@ export default function CreateResume() {
         toast("Please enter a skill name");
         return;
       }
-      setSkills(prev => [...prev, newSkill]);
+      const updatedSkills = [...skills, newSkill];
+      setSkills(updatedSkills);
       
       if (userId && resumeId) {
         try {
-          const updatedSkills = [...skills, newSkill];
-          const { error } = await supabase
-            .from('resume_info')
-            .update({ 
-              skills: updatedSkills,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', resumeId)
-            .eq('user_id', userId);
-            
-          if (error) throw error;
+          await saveResumeSection(userId, resumeId, "skills", updatedSkills);
           toast.success("Skill saved to database");
         } catch (error) {
           console.error("Error saving skill:", error);
-          toast.error("Failed to save skill to database");
         }
       }
     } else if (dialogType === "link") {
@@ -391,25 +350,15 @@ export default function CreateResume() {
         toast("Please fill in all fields");
         return;
       }
-      setLinks(prev => [...prev, newLink]);
+      const updatedLinks = [...links, newLink];
+      setLinks(updatedLinks);
       
       if (userId && resumeId) {
         try {
-          const updatedLinks = [...links, newLink];
-          const { error } = await supabase
-            .from('resume_info')
-            .update({ 
-              links: updatedLinks,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', resumeId)
-            .eq('user_id', userId);
-            
-          if (error) throw error;
+          await saveResumeSection(userId, resumeId, "links", updatedLinks);
           toast.success("Link saved to database");
         } catch (error) {
           console.error("Error saving link:", error);
-          toast.error("Failed to save link to database");
         }
       }
     }
@@ -419,110 +368,39 @@ export default function CreateResume() {
   };
 
   const removeItem = async (type: string, id: string) => {
+    let updatedData;
+    let sectionType;
+    
     if (type === "work") {
-      const updatedWorkExperience = workExperience.filter(item => item.id !== id);
-      setWorkExperience(updatedWorkExperience);
-      
-      if (userId && resumeId) {
-        try {
-          const { error } = await supabase
-            .from('resume_info')
-            .update({ 
-              work_experience: updatedWorkExperience,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', resumeId)
-            .eq('user_id', userId);
-            
-          if (error) throw error;
-        } catch (error) {
-          console.error("Error updating work experience:", error);
-          toast.error("Failed to update database");
-        }
-      }
+      updatedData = workExperience.filter(item => item.id !== id);
+      setWorkExperience(updatedData);
+      sectionType = "work_experience";
     } else if (type === "education") {
-      const updatedEducation = education.filter(item => item.id !== id);
-      setEducation(updatedEducation);
-      
-      if (userId && resumeId) {
-        try {
-          const { error } = await supabase
-            .from('resume_info')
-            .update({ 
-              education: updatedEducation,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', resumeId)
-            .eq('user_id', userId);
-            
-          if (error) throw error;
-        } catch (error) {
-          console.error("Error updating education:", error);
-          toast.error("Failed to update database");
-        }
-      }
+      updatedData = education.filter(item => item.id !== id);
+      setEducation(updatedData);
+      sectionType = "education";
     } else if (type === "project") {
-      const updatedProjects = projects.filter(item => item.id !== id);
-      setProjects(updatedProjects);
-      
-      if (userId && resumeId) {
-        try {
-          const { error } = await supabase
-            .from('resume_info')
-            .update({ 
-              projects: updatedProjects,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', resumeId)
-            .eq('user_id', userId);
-            
-          if (error) throw error;
-        } catch (error) {
-          console.error("Error updating projects:", error);
-          toast.error("Failed to update database");
-        }
-      }
+      updatedData = projects.filter(item => item.id !== id);
+      setProjects(updatedData);
+      sectionType = "projects";
     } else if (type === "skill") {
-      const updatedSkills = skills.filter(item => item.id !== id);
-      setSkills(updatedSkills);
-      
-      if (userId && resumeId) {
-        try {
-          const { error } = await supabase
-            .from('resume_info')
-            .update({ 
-              skills: updatedSkills,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', resumeId)
-            .eq('user_id', userId);
-            
-          if (error) throw error;
-        } catch (error) {
-          console.error("Error updating skills:", error);
-          toast.error("Failed to update database");
-        }
-      }
+      updatedData = skills.filter(item => item.id !== id);
+      setSkills(updatedData);
+      sectionType = "skills";
     } else if (type === "link") {
-      const updatedLinks = links.filter(item => item.id !== id);
-      setLinks(updatedLinks);
-      
-      if (userId && resumeId) {
-        try {
-          const { error } = await supabase
-            .from('resume_info')
-            .update({ 
-              links: updatedLinks,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', resumeId)
-            .eq('user_id', userId);
-            
-          if (error) throw error;
-        } catch (error) {
-          console.error("Error updating links:", error);
-          toast.error("Failed to update database");
-        }
+      updatedData = links.filter(item => item.id !== id);
+      setLinks(updatedData);
+      sectionType = "links";
+    } else {
+      return;
+    }
+    
+    if (userId && resumeId) {
+      try {
+        await saveResumeSection(userId, resumeId, sectionType as any, updatedData);
+      } catch (error) {
+        console.error(`Error updating ${type}:`, error);
+        toast.error("Failed to update database");
       }
     }
   
@@ -545,7 +423,6 @@ export default function CreateResume() {
       setIsSaving(true);
       
       const resumeData = {
-        user_id: userId,
         template_id: selectedTemplate?.id || null,
         personal_info: personalInfo,
         work_experience: workExperience,
@@ -554,33 +431,15 @@ export default function CreateResume() {
         skills: skills,
         links: links,
         generated_latex: generatedLatex,
-        updated_at: new Date().toISOString()
       };
       
-      let response;
+      const newResumeId = await saveFullResume(userId, resumeId, resumeData);
       
-      if (resumeId) {
-        response = await supabase
-          .from('resume_info')
-          .update(resumeData)
-          .eq('id', resumeId);
-      } else {
-        response = await supabase
-          .from('resume_info')
-          .insert(resumeData)
-          .select();
+      if (newResumeId && !resumeId) {
+        setResumeId(newResumeId);
       }
-      
-      if (response.error) throw response.error;
-      
-      if (response.data && response.data[0]) {
-        setResumeId(response.data[0].id);
-      }
-      
-      toast.success(resumeId ? "Resume updated successfully!" : "Resume created successfully!");
     } catch (error) {
-      console.error('Error saving resume:', error);
-      toast.error("Failed to save resume");
+      console.error('Error in handleSaveResume:', error);
     } finally {
       setIsSaving(false);
     }
@@ -603,15 +462,10 @@ export default function CreateResume() {
       
       toast.success("Resume data cleared");
     };
-  const [isDownloading, setIsDownloading] = useState(false); // Add state for download loading
-
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [cachedLatex, setCachedLatex] = useState<string | null>(null);
+ 
 
  
   const handleGenerateResume = async () => {
-    // ... (start of function - checks and state resets) ...
     if (!selectedTemplate) {
       toast.error("Please select a template first");
       setIsTemplateDialogOpen(true);
@@ -626,7 +480,9 @@ export default function CreateResume() {
 
     const generationCost = 5;
     if (userCredits < generationCost) {
-      toast.error(`Insufficient credits. You need ${generationCost} credits to generate a resume.`);
+      toast.error(
+        <PricingToast credits={5} />
+      );
       return;
     }
 

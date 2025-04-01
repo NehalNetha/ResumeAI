@@ -3,8 +3,8 @@ import { NextResponse } from 'next/server';
 // Import GenerateContentStreamResult
 import { GoogleGenerativeAI, GenerateContentStreamResult } from '@google/generative-ai';
 import { createClient } from '@/utils/supabase/server';
-import { withRateLimit } from '@/utils/rate-limit-middleware';
-import { rateLimiters } from '@/utils/rate-limit';
+import { rateLimiters } from '@/utils/rateLimiting/rate-limit';
+import { withRateLimit } from '@/utils/rateLimiting/rate-limit-middleware';
 
 // Initialize the Google Generative AI with your API key
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI, GenerateContentStreamResult } from '@google/generative-ai';
 import { createClient } from '@/utils/supabase/server';
-import { withRateLimit } from '@/utils/rate-limit-middleware';
-import { rateLimiters } from '@/utils/rate-limit';
+import { rateLimiters } from '@/utils/rateLimiting/rate-limit';
+import { withRateLimit } from '@/utils/rateLimiting/rate-limit-middleware';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
