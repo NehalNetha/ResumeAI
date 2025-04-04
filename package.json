@@ -42,7 +42,6 @@
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@next/font": "^14.2.15",
     "@tailwindcss/postcss": "^4",
     "@types/diff": "^7.0.2",
     "@types/node": "^20",

@@ -370,7 +370,7 @@ export default function Dashboard() {
        }
 
         // Set final state after stream completion (optional, as incremental updates handle it)
-       // setGeneratedLatex(accumulatedLatex);
+       // setGeneratedLatex(accumulatedLatex)
 
        // Deduct credits *after* successful stream completion
        if (userId) {
@@ -614,7 +614,7 @@ const handleChatSubmit = async () => {
     setChatQuestion('');
 
     if(userId) {
-      await updateUserCredits(userId, 1, "resume customization dashboard");
+      await updateUserCredits(userId, 3, "resume customization dashboard");
     }
     
     toast.success("Resume updated based on your request");
@@ -651,6 +651,11 @@ const handleChatSubmit = async () => {
     }
     
     await downloadPdf(generatedLatex);
+
+    if (userId) {
+      await updateUserCredits(userId, 5, "resume download dashboard");
+      setUserCredits(prev => Math.max(0, prev - 5));
+    }
   };
   
 
@@ -755,7 +760,8 @@ const handleClearAll = () => {
                         visible={activeTab === 'resumes'}
                       />
 
-                      <div className=''>
+                      
+                      <div className='h-full overflow-hidden'>
                       
                       <TemplateSelector
                         templates={templates}

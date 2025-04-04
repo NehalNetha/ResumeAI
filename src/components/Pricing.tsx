@@ -26,8 +26,8 @@ const pricingPlans: PricingPlan[] = [
     credits: 50,
     description: 'Try out our basic features',
     features: [
-      '5 free credits',
-      'Basic templates',
+      '50 free credits',
+      'all templates',
       'Export as PDF',
     ],
     priceId: '', // No price ID for free plan
@@ -39,8 +39,8 @@ const pricingPlans: PricingPlan[] = [
     credits: 100,
     description: 'Perfect for active job seekers',
     features: [
-      '50 credits',
-      'All premium templates',
+      '100 credits',
+      'All templates',
       'Reiterate on Resume using AI',
       'Priority support'
     ],
@@ -57,7 +57,6 @@ const pricingPlans: PricingPlan[] = [
       '300',
       'All premium templates',
       'Reiterate infintie times ',
-      'Cover letter builder',
       'Priority support',
     ],
     priceId: 'price_0987654321',
@@ -205,9 +204,7 @@ const Pricing = () => {
             <ul className="mt-4 space-y-2 text-left max-w-md mx-auto">
               <li>• Creating a new resume: 5 credits</li>
               <li>• AI-powered resume optimization: 3 credits</li>
-              <li>• Generating a cover letter: 5 credits</li>
               <li>• Exporting to formats: 5 credit</li>
-              <li>• Accessing premium templates: 5 credits</li>
             </ul>
             <p className="mt-6">Credits never expire, so you can use them whenever you need!</p>
           </div>

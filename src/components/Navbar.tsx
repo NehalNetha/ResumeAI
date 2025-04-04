@@ -56,7 +56,7 @@ const Navbar = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) setUser(user ?? null);
-      ;
+      
     } catch (error) {
       console.error('Error fetching user info:', error);
     }
@@ -80,6 +80,8 @@ const Navbar = () => {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    setUser(null);
+    setUserCredits(0);
   };
 
   return (

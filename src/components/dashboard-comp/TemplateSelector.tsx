@@ -19,7 +19,7 @@ export default function TemplateSelector({
   if (!visible) return null;
 
   return (
-    <div className="flex-1 h-full">
+    <div className="flex-1 h-full overflow-hidden">
       {templates.length === 0 ? (
         <div className="text-center py-8 text-gray-500 h-full flex items-center justify-center">
           <div>
@@ -28,7 +28,7 @@ export default function TemplateSelector({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-2 h-full overflow-y-auto">
+        <div className="grid grid-cols-1 gap-2 h-full overflow-y-auto pr-2 pb-4">
           {templates.map((template) => (
             <div 
               key={template.id}
