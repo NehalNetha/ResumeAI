@@ -96,15 +96,14 @@ const Navbar = () => {
           <div className="flex items-center">
             <a href="/" className="flex items-center ">
               <div className="w-[100px] h-[100px] py-4 rounded flex items-center justify-center">
-                <Image
-                  src="/logo.svg"
+                <img
+                  src="/logo.png"
                   alt="Logo"
-                  width={200}
-                  height={200}
-                  className="w-full h-full "
+                
+                  className="pt-1 w-full h-[6.5rem]"
                 />
               </div>
-              <span className="text-xl font-semibold">ResumeAI</span>
+              <span className="text-xl font-semibold">ResumeRaft</span>
             </a>
           </div>
 

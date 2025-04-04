@@ -23,7 +23,7 @@ const FAQItem = ({ question, answer, isOpen, toggleOpen }: FAQItemProps) => {
       </button>
       
       {isOpen && (
-        <div className="p-4 pt-0 text-gray-600 border-t border-gray-100">
+        <div className="p-4  pt-3 text-gray-600 border-t border-gray-100">
           <p>{answer}</p>
         </div>
       )}
@@ -48,8 +48,12 @@ const FAQ = () => {
       answer: "We offer multiple download formats including PDF, or tex file"
     },
     {
-      question: "What file formats can I download my resume in?",
-      answer: "We offer multiple download formats including PDF, or tex file"
+      question: "Do you offer any templates?",
+      answer: "Yes! We offer a variety of professionally designed templates suitable for different industries and career levels. Our templates are ATS-friendly while still being visually appealing to human recruiters."
+    },
+    {
+      question: "Can I delete my data and account?",
+      answer: "Yes! You can delete your data and account at any time."
 
     }
   ];
@@ -73,12 +77,7 @@ const FAQ = () => {
               </div>
               <h2 className="text-3xl font-bold mb-4">Answers to Your Most Common Resume Questions</h2>
               <p className="text-gray-600 mb-6">Get clarity on how our AI resume builder works.</p>
-              <a 
-                href="/faq" 
-                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              >
-                View all FAQs
-              </a>
+             
             </div>
           </div>
           

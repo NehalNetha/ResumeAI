@@ -16,7 +16,7 @@ const Footer = () => {
         <div className="flex justify-between items-center">
           {/* Copyright and Support Email */}
           <div className="text-gray-600 text-sm">
-            <p>© 2025 CVCRAFT. All rights reserved.</p>
+            <p>© 2025 ResumeRaft. All rights reserved.</p>
             <p className="mt-1">Support: <a href="mailto:support@cvcraft.com" className="hover:text-blue-600 transition-colors">support@cvcraft.com</a></p>
           </div>
 

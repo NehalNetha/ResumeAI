@@ -14,8 +14,13 @@ import {
   User,
   PanelLeft,
   PenLine,
-  Save
+  Save,
+  Coins,
+  LogOut
 } from 'lucide-react';
+import { createClient } from '@/utils/supabase/client';
+import { User as SupabaseUser } from '@supabase/auth-js';
+import { fetchUserCredits } from '@/utils/credits/credits';
 
 type SidebarItemProps = {
   icon: React.ReactNode;
@@ -46,6 +51,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [userCredits, setUserCredits] = useState<number>(0);
+  const [isLoadingCredits, setIsLoadingCredits] = useState(false);
+  const supabase = createClient();
 
   // Handle mobile view
   useEffect(() => {
@@ -59,6 +68,42 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const fetchUserInfo = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setUser(user);
+    } catch (error) {
+      console.error('Error fetching user info:', error);
+    }
+  };
+
+  const loadUserCredits = async (userId: string) => {
+    try {
+      setIsLoadingCredits(true);
+      const credits = await fetchUserCredits(userId);
+      setUserCredits(credits);
+    } catch (error) {
+      console.error('Error loading user credits:', error);
+    } finally {
+      setIsLoadingCredits(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUserInfo();
+  }, []);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadUserCredits(user.id);
+    }
+  }, [user?.id]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/'; // Redirect to home page after logout
+  };
 
   const toggleSidebar = () => {
     if (window.innerWidth >= 768) {
@@ -89,31 +134,43 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       >
         {/* Sidebar Header */}
         <div className="flex h-16 items-center justify-between px-4 border-b">
-          <Link 
-            href={!isCollapsed ? "/" : ""} 
-            onClick={isCollapsed ? toggleSidebar : undefined}
-            className="flex items-center gap-2"
+          {/* Container for Logo and Title - Use relative positioning */}
+          <Link
+            href={!isCollapsed ? "/" : "#"} // Navigate to home only when expanded
+            onClick={isCollapsed ? (e) => { e.preventDefault(); toggleSidebar(); } : undefined} // Prevent navigation and toggle when collapsed
+            className={cn(
+              "relative h-full", // Add relative position context, use full height of parent
+              // Adjust width: enough for logo when collapsed, wider when expanded
+              isCollapsed ? "w-8" : "w-40" 
+            )}
+            aria-label={isCollapsed ? "Expand Sidebar" : "Go to Homepage"}
           >
-            <div className="w-8 h-8 rounded bg-blue-500 flex items-center justify-center cursor-pointer">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L20 7V17L12 22L4 17V7L12 2Z" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            {!isCollapsed && <span className="text-xl font-semibold">ResumeAI</span>}
+            {/* Absolutely position the logo within the Link */}
+            <img
+              src="/logo.png"
+              alt="Logo"
+              // Position absolutely, center vertically, place at the left
+              className={`absolute top-1/2 left-0 transform -translate-y-1/2 ${isCollapsed ? "h-10 w-11": "h-16 w-16" }`}
+            />
+             {/* Absolutely position the Title, show only when not collapsed */}
+            {!isCollapsed && (
+              <span className="absolute top-1/2 left-14 transform -translate-y-1/2 text-xl font-semibold whitespace-nowrap"> {/* Position to the right of the logo */}
+                ResumeAI
+              </span>
+            )}
           </Link>
 
-
+          {/* Collapse Button */}
           {!isCollapsed && (
             <Button
               variant="ghost"
               size="icon"
               onClick={toggleSidebar}
-              className="hidden lg:flex hover:bg-transparent"
+              className="hidden lg:flex hover:bg-transparent" // This part remains the same
             >
               <PanelLeft />
             </Button>
           )}
-
           
         </div>
 
@@ -163,23 +220,59 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               isActive={pathname === '/dashboard/profile'}
               collapsed={isCollapsed}
             />
-            <SidebarItem 
-              icon={<Settings size={20} />} 
-              title="Settings" 
-              href="/dashboard/settings" 
-              isActive={pathname === '/dashboard/settings'}
-              collapsed={isCollapsed}
-            />
+         
           </div>
         </div>
 
-        {/* User Profile */}
-        <div className="p-4 border-t flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0"></div>
-          {!isCollapsed && (
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">John Doe</p>
-              <p className="text-xs text-gray-500 truncate">john@example.com</p>
+        {/* User Profile - Updated */}
+        <div className="p-4 border-t">
+          {user ? (
+            <div className="flex flex-col space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {user.user_metadata?.avatar_url ? (
+                    <img 
+                      src={user.user_metadata.avatar_url} 
+                      alt="Profile" 
+                      className="w-8 h-8 rounded-full flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0"></div>
+                  )}
+                  
+                  {!isCollapsed && (
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                    </div>
+                  )}
+                </div>
+                
+                {!isCollapsed && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleLogout}
+                    className="text-gray-500 hover:text-red-500 ml-2"
+                  >
+                    <LogOut size={16} />
+                  </Button>
+                )}
+              </div>
+              
+              
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-gray-200 flex-shrink-0"></div>
+              {!isCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">Loading...</p>
+                  <p className="text-xs text-gray-500 truncate">Please wait</p>
+                </div>
+              )}
             </div>
           )}
         </div>
