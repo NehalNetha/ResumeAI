@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ResumeRaft - AI-Powered Resume Builder",
   description: "Create professional resumes with AI assistance. Customize templates and get instant feedback to land your dream job.",
-  keywords: ["resume builder", "AI resume", "job application", "professional resume", "CV builder"],
+  keywords: ["resume builder", "AI resume", "professional resume", "CV builder"],
   authors: [{ name: "ResumeRaft Team" }],
   creator: "ResumeRaft",
   icons: {
