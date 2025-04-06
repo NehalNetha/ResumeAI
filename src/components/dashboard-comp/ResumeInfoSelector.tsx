@@ -147,7 +147,7 @@ export default function ResumeInfoSelector({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto h-full">
       {!userId ? (
         <div className="text-center py-8 text-gray-500">
           <User className="mx-auto h-12 w-12 text-gray-400 mb-4" />
@@ -167,7 +167,7 @@ export default function ResumeInfoSelector({
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-2 mt-2 max-h-[calc(100vh-450px)] overflow-y-auto">
+        <div className="grid grid-cols-1 gap-2 mt-2 overflow-y-auto h-full pb-4">
           {resumeInfos.map((info) => (
             <div 
               key={info.id}

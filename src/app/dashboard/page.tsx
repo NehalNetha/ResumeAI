@@ -257,12 +257,13 @@ export default function Dashboard() {
   // Add a function to update user credits
  
   
+ 
   const handleGenerateResume = async () => {
     if (!selectedTemplate || (selectedResumes.length === 0 && !selectedResumeInfo) || !jobDescription.trim()) {
       toast("Please select a template, at least one resume or saved information, and provide a job description");
       return;
     }
-
+  
     if (userCredits < 5) {
       toast.error(
         <PricingToast credits={5} />
@@ -287,12 +288,12 @@ export default function Dashboard() {
             sessionStorage.removeItem('generatedLatex');
         }
     }
-
+  
     setShowDiff(false); // Hide diff view during generation
     setPreviewMode('raw'); // Switch to raw view
-
+  
     let generationSuccessful = false; // Flag to track successful completion
-
+  
     try {
       let templateWithLatex = selectedTemplate;
       // Fetch template content if missing (if it wasn't loaded initially or selected from a list without content)
@@ -302,9 +303,9 @@ export default function Dashboard() {
           .select('latex_content')
           .eq('id', selectedTemplate!.id) // Use non-null assertion as selectedTemplate check happened above
           .single();
-
+  
         if (error) throw error;
-
+  
         if (data && data.latex_content) {
           templateWithLatex = {
             ...selectedTemplate!, // Use non-null assertion
@@ -315,7 +316,7 @@ export default function Dashboard() {
            if (typeof window !== 'undefined') {
              sessionStorage.setItem('originalLatex', data.latex_content);
            }
-
+  
         } else {
             throw new Error("Selected template content could not be loaded.");
         }
@@ -323,13 +324,28 @@ export default function Dashboard() {
         // If content already exists, ensure originalLatex is set correctly
         setOriginalLatex(templateWithLatex.latex_content);
       }
-
-
-      // Create a customized resumeInfo (remains the same)
+  
+  
+      // Create a customized resumeInfo with the selected components
       let customizedResumeInfo = null;
       if (selectedResumeInfo) {
-        customizedResumeInfo = { /* ... selected components ... */ };
+        customizedResumeInfo = {
+          personal_info: selectedComponents.personalInfo,
+          work_experience: selectedComponents.workExperiences,
+          education: selectedComponents.educations,
+          projects: selectedComponents.projects,
+          skills: selectedComponents.skills,
+          links: selectedComponents.links
+        };
       }
+  
+      console.log('Sending request to /api/gemini with:', {
+        resumesCount: selectedResumes.length,
+        templateId: templateWithLatex?.id,
+        jobDescriptionLength: jobDescription.length,
+        hasResumeInfo: !!customizedResumeInfo,
+        resumeInfo: customizedResumeInfo // Now this will show the actual data
+      });
 
       const response = await fetch('/api/gemini', {
         method: 'POST',
@@ -340,52 +356,78 @@ export default function Dashboard() {
           resumes: selectedResumes,
           template: templateWithLatex, // Pass the potentially updated template
           jobDescription,
-          resumeInfo: customizedResumeInfo
+          resumeInfo: customizedResumeInfo // <-- This is what's sent
         }),
       });
+  
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries([...response.headers.entries()]));
 
-      if (!response.ok || !response.body) {
-         // Try to parse potential JSON error response from the server
-         const errorData = await response.json().catch(() => ({ error: `HTTP error! Status: ${response.status}` }));
-         throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
+      if (!response.ok) {
+        // Try to parse potential JSON error response from the server
+        let errorMessage = `HTTP error! Status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+          console.error('Error response from server:', errorData);
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+        }
+        throw new Error(errorMessage);
       }
-
+  
+      if (!response.body) {
+        throw new Error('Response body is empty');
+      }
+  
       // --- Handle the stream ---
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let accumulatedLatex = '';
-
+      let chunkCount = 0;
+  
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log(`Stream complete after ${chunkCount} chunks`);
+          break;
+        }
+        
         const chunk = decoder.decode(value, { stream: true });
+        chunkCount++;
+        
+        console.log(`Received chunk ${chunkCount}:`, chunk.substring(0, 50) + (chunk.length > 50 ? '...' : ''));
+        
+        // Check if the chunk contains an error message
+        if (chunk.includes('"error"') || chunk.includes('An error occurred')) {
+          console.error('Error in stream chunk:', chunk);
+          throw new Error(chunk.includes('"error"') ? JSON.parse(chunk).error : chunk);
+        }
+        
         accumulatedLatex += chunk;
         setGeneratedLatex(prev => prev + chunk); // Update state incrementally
       }
       // --- Finished reading stream ---
-
+  
       // Final check if any content was generated
-       if (!accumulatedLatex.trim()) {
-           throw new Error("Generation finished, but no content was received.");
-       }
-
-        // Set final state after stream completion (optional, as incremental updates handle it)
-       // setGeneratedLatex(accumulatedLatex)
-
-       // Deduct credits *after* successful stream completion
-       if (userId) {
-           await updateUserCredits(userId, 5, "resume generation");
-           // Update local credit count after deduction
-           setUserCredits(prev => Math.max(0, prev - 5));
-       }
-
-        generationSuccessful = true; // Mark as successful
-        toast.success("Resume template customized successfully! (5 credits used)");
-
+      if (!accumulatedLatex.trim()) {
+        throw new Error("Generation finished, but no content was received.");
+      }
+  
+      // Deduct credits *after* successful stream completion
+      if (userId) {
+        await updateUserCredits(userId, 5, "resume generation");
+        // Update local credit count after deduction
+        setUserCredits(prev => Math.max(0, prev - 5));
+      }
+  
+      generationSuccessful = true; // Mark as successful
+      toast.success("Resume template customized successfully! (5 credits used)");
+  
     } catch (error) {
       console.error('Error generating resume:', error);
       toast.error(error instanceof Error ? error.message : "Failed to customize resume template");
-       // Clear partial results on error
+      // Clear partial results on error
       setGeneratedLatex('');
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('generatedLatex');
@@ -393,13 +435,13 @@ export default function Dashboard() {
     } finally {
       setIsGenerating(false);
       // Optional: Store the fully generated latex only if successful
-        if (generationSuccessful && typeof window !== 'undefined') {
-            // Get the final state value directly
-            setGeneratedLatex(currentLatex => {
-                 sessionStorage.setItem('generatedLatex', currentLatex);
-                 return currentLatex; // Return the current state value without changing it
-            });
-        }
+      if (generationSuccessful && typeof window !== 'undefined') {
+        // Get the final state value directly
+        setGeneratedLatex(currentLatex => {
+          sessionStorage.setItem('generatedLatex', currentLatex);
+          return currentLatex; // Return the current state value without changing it
+        });
+      }
     }
   };
 
@@ -412,10 +454,13 @@ export default function Dashboard() {
         .order('updated_at', { ascending: false });
         
       if (error) throw error;
+
       
       if (data) {
         setResumeInfos(data as ResumeInfo[]);
       }
+
+      console.log('Resume information fetched:', data); // Log the fetched data for inspection
     } catch (error) {
       console.error('Error fetching resume information:', error);
       toast.error("Failed to load resume information");
@@ -639,7 +684,6 @@ const handleChatSubmit = async () => {
   
   const selectTemplate = (template: Template) => {
     setSelectedTemplate(template);
-    toast(`Template "${template.name}" selected`);
   };
 
 
@@ -732,13 +776,13 @@ const handleClearAll = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-auto lg:h-[calc(100vh-50px)]">
           {/* Left side - Job Description and Selection */}
           <div className="flex flex-col space-y-4">
-            <Card className="flex flex-col overflow-hidden">
+            <Card className="flex flex-col overflow-hidden h-full"> {/* Added h-full */}
               <CardContent className="flex-1 flex flex-col p-4">
-                <JobDescriptionSection 
+                <JobDescriptionSection
                   jobDescription={jobDescription}
                   setJobDescription={setJobDescription}
                 />
-                
+
                 <div className="flex-1 overflow-hidden mt-4">
                   {/* Tabs for navigation */}
                   <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'resumes' | 'templates' | 'info')} className="h-full flex flex-col">
@@ -747,30 +791,32 @@ const handleClearAll = () => {
                       <TabsTrigger value="templates" className="flex-1">Templates</TabsTrigger>
                       <TabsTrigger value="info" className="flex-1">My Info</TabsTrigger>
                     </TabsList>
-                    
-                    <div className="flex-1 overflow-hidden">
+
+                    {/* Use TabsContent for each tab */}
+                    <TabsContent value="resumes" className="flex-1 overflow-y-auto mt-0"> {/* Adjust styling as needed */}
                       <ResumeSelector
-                        activeTab={activeTab}
-                        setActiveTab={setActiveTab}
+                        activeTab={activeTab} // Keep for now, might remove later if not needed internally
+                        setActiveTab={setActiveTab} // Keep for now
                         uploadedResumes={uploadedResumes}
                         selectedResumes={selectedResumes}
                         isLoading={isLoading}
                         onSelectResume={selectResume}
                         onFileInput={handleFileInput}
-                        visible={activeTab === 'resumes'}
+                        visible={activeTab === 'resumes'} // Keep for now, or remove if ResumeSelector relies only on being mounted
                       />
+                    </TabsContent>
 
-                      
-                      <div className='h-full overflow-hidden'>
-                      
-                      <TemplateSelector
-                        templates={templates}
-                        selectedTemplate={selectedTemplate}
-                        onSelectTemplate={selectTemplate}
-                        visible={activeTab === 'templates'}
-                      />
-                      </div>
-                      
+                    <TabsContent value="templates" className="flex-1 overflow-y-auto mt-0 h-full"> {/* Adjust styling as needed */}
+                       {/* Removed the extra div with h-full */}
+                        <TemplateSelector
+                          templates={templates}
+                          selectedTemplate={selectedTemplate}
+                          onSelectTemplate={selectTemplate}
+                          visible={activeTab === 'templates'} // Keep for now
+                        />
+                    </TabsContent>
+
+                    <TabsContent value="info" className="flex-1 overflow-y-auto mt-0"> {/* Adjust styling as needed */}
                       <ResumeInfoSelector
                         userId={userId}
                         resumeInfos={resumeInfos}
@@ -778,14 +824,14 @@ const handleClearAll = () => {
                         selectedComponents={selectedComponents}
                         setSelectedResumeInfo={setSelectedResumeInfo}
                         setSelectedComponents={setSelectedComponents}
-                        visible={activeTab === 'info'}
+                        visible={activeTab === 'info'} // Keep for now
                       />
-                    </div>
+                    </TabsContent>
                   </Tabs>
                 </div>
               </CardContent>
             </Card>
-            
+
             {/* Generate button */}
             <Button 
               onClick={handleGenerateResume} 
