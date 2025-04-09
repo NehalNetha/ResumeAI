@@ -26,15 +26,16 @@ export default function AuthLayout({ children, title, description }: AuthLayoutP
         {/* Rest of the left side content remains unchanged */}
         <div className="relative z-10">
           <Link href="/" className="flex items-center">
-            <div className="w-[60px] h-[60px] rounded-xl flex items-center justify-center bg-white/90 shadow-md p-2">
+            <div className="w-[60px] h-[60px] rounded-xl flex items-center justify-center  p-2">
               <Image
-                src="/logo.svg"
+                src="/logoFavicon.png"
                 alt="ResumeAI Logo"
-                width={40}
-                height={40}
+                width={80}
+                height={80}
+                className='rounded-md'
               />
             </div>
-            <span className="text-xl font-bold text-white ml-3">ResumeAI</span>
+            <span className="text-xl font-bold text-white ml-3">ResumeRaft</span>
           </Link>
           
           <div className="mt-20">
