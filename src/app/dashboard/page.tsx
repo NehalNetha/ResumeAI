@@ -347,51 +347,73 @@ export default function Dashboard() {
         resumeInfo: customizedResumeInfo // Now this will show the actual data
       });
 
-      // Prepare the request body
-      const requestBody = {
-        template: templateWithLatex,
-        jobDescription,
-        resumes: selectedResumes.map(resume => ({
-          name: resume.name,
-          url: resume.url
-        })),
-        resumeInfo: selectedResumeInfo ? {
-          personal_info: selectedComponents.personalInfo,
-          work_experience: selectedComponents.workExperiences,
-          education: selectedComponents.educations,
-          projects: selectedComponents.projects,
-          skills: selectedComponents.skills,
-          links: selectedComponents.links
-        } : undefined
-      };
-
-      // Modified section: Handle non-streaming response
       const response = await fetch('/api/gemini', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          resumes: selectedResumes,
+          template: templateWithLatex, // Pass the potentially updated template
+          jobDescription,
+          resumeInfo: customizedResumeInfo // <-- This is what's sent
+        }),
       });
+  
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries([...response.headers.entries()]));
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate resume');
-      }
-
-      // Parse the JSON response
-      const data = await response.json();
-      
-      if (data.latex) {
-        setGeneratedLatex(data.latex);
-        if (typeof window !== 'undefined') {
-          sessionStorage.setItem('generatedLatex', data.latex);
+        // Try to parse potential JSON error response from the server
+        let errorMessage = `HTTP error! Status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+          console.error('Error response from server:', errorData);
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
         }
-        generationSuccessful = true;
-      } else {
-        throw new Error('No LaTeX content received');
+        throw new Error(errorMessage);
       }
-
+  
+      if (!response.body) {
+        throw new Error('Response body is empty');
+      }
+  
+      // --- Handle the stream ---
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedLatex = '';
+      let chunkCount = 0;
+  
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log(`Stream complete after ${chunkCount} chunks`);
+          break;
+        }
+        
+        const chunk = decoder.decode(value, { stream: true });
+        chunkCount++;
+        
+        console.log(`Received chunk ${chunkCount}:`, chunk.substring(0, 50) + (chunk.length > 50 ? '...' : ''));
+        
+        // Check if the chunk contains an error message
+        if (chunk.includes('"error"') || chunk.includes('An error occurred')) {
+          console.error('Error in stream chunk:', chunk);
+          throw new Error(chunk.includes('"error"') ? JSON.parse(chunk).error : chunk);
+        }
+        
+        accumulatedLatex += chunk;
+        setGeneratedLatex(prev => prev + chunk); // Update state incrementally
+      }
+      // --- Finished reading stream ---
+  
+      // Final check if any content was generated
+      if (!accumulatedLatex.trim()) {
+        throw new Error("Generation finished, but no content was received.");
+      }
+  
       // Deduct credits *after* successful stream completion
       if (userId) {
         await updateUserCredits(userId, 5, "resume generation");
