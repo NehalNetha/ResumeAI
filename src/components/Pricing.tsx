@@ -30,12 +30,12 @@ const pricingPlans: PricingPlan[] = [
       'all templates',
       'Export as PDF',
     ],
-    priceId: '', // No price ID for free plan
+    priceId: 'price_1RDf0wFMh96BYPjLj7NCjPIG', // No price ID for free plan
   },
   {
     id: 'pro',
     name: 'Pro Pack',
-    price: 9.99,
+    price: 5.99,
     credits: 100,
     description: 'Perfect for active job seekers',
     features: [
@@ -44,13 +44,13 @@ const pricingPlans: PricingPlan[] = [
       'Reiterate on Resume using AI',
       'Priority support'
     ],
-    priceId: 'price_1R8FpzQ1y44SJwcyuRDhieij',
+    priceId: 'price_1RDf0wFMh96BYPjLj7NCjPIG',
     popular: true,
   },
   {
     id: 'enterprise',
     name: 'Beast Pack',
-    price: 19.99,
+    price: 9.99,
     credits: 300,
     description: 'Best value',
     features: [
@@ -59,7 +59,7 @@ const pricingPlans: PricingPlan[] = [
       'Reiterate infintie times ',
       'Priority support',
     ],
-    priceId: 'price_0987654321',
+    priceId: 'price_1RDf1GFMh96BYPjLgpXMcLLO',
   }
 ];
 

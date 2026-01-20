@@ -1,17 +1,13 @@
 import { NextResponse } from 'next/server';
-import {
-  GoogleGenerativeAI,
-  GenerateContentStreamResult,
-  Part, // Import Part type
-  Content, // Import Content type
-} from '@google/generative-ai';
+import OpenAI from 'openai';
 import { createClient } from '@/utils/supabase/server';
 import { rateLimiters } from '@/utils/rateLimiting/rate-limit';
 import { withRateLimit } from '@/utils/rateLimiting/rate-limit-middleware';
 
 // --- Configuration ---
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const MODEL_NAME = process.env.GEMINI_MODEL_NAME || 'gemini-1.5-flash'; // Allow overriding via env var
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
+const MODEL_NAME = process.env.OPENAI_MODEL_NAME || 'gpt-4o-mini';
 const SYSTEM_INSTRUCTION = `You are an expert resume tailoring assistant. Your task is to customize a LaTeX resume template
 based on the provided resume PDF(s), structured resume information, and job description. Focus on:
 1.  Highlighting relevant skills and experiences that match the job requirements.
@@ -25,7 +21,7 @@ based on the provided resume PDF(s), structured resume information, and job desc
 9.  If the resume pdf, contains, job descriptions, analyse it, see if it is good, if it is add that, if there's no points, description of anything, add those, the resume should be as filled as possible.
 `;
 
-// --- Type Definitions (Optional but recommended) ---
+// --- Type Definitions ---
 interface ResumeInfo {
   personal_info?: Record<string, any>;
   work_experience?: any[];
@@ -33,13 +29,11 @@ interface ResumeInfo {
   projects?: any[];
   skills?: any[];
   links?: any[];
-  // Add other potential fields
 }
 
 interface ResumeFile {
   name: string;
-  url?: string; // URL to the PDF on Supabase Storage or elsewhere
-  // Optionally add size, type etc. if needed
+  url?: string;
 }
 
 interface Template {
@@ -49,98 +43,58 @@ interface Template {
 }
 
 // --- Initialization ---
-if (!GEMINI_API_KEY) {
-  console.error("FATAL: GEMINI_API_KEY environment variable is not set.");
-  // Optionally throw an error during build/startup if preferred
+if (!OPENAI_API_KEY) {
+  console.error("FATAL: OPENAI_API_KEY environment variable is not set.");
 }
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY || ''); // Fallback empty string prevents immediate crash if check is bypassed
-const model = genAI.getGenerativeModel({
-    model: MODEL_NAME,
-    systemInstruction: SYSTEM_INSTRUCTION,
+const openai = new OpenAI({
+  apiKey: OPENAI_API_KEY || '',
+  baseURL: OPENAI_BASE_URL,
 });
-
 
 // --- Helper Functions ---
 
 /**
- * Pipes the Gemini stream to a ReadableStream controller.
- * Encodes text chunks and handles stream errors/completion.
+ * Streams OpenAI response to a ReadableStream controller.
  */
-async function streamGeminiResponse(
-  streamResult: GenerateContentStreamResult,
+async function streamOpenAIResponse(
+  stream: AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
   controller: ReadableStreamDefaultController<any>
-): Promise<void> { // Added return type hint
+): Promise<void> {
   const encoder = new TextEncoder();
   try {
-    for await (const chunk of streamResult.stream) {
-      // Defensive check for text content
-      const text = chunk.text?.(); // Use optional chaining just in case
+    for await (const chunk of stream) {
+      const text = chunk.choices[0]?.delta?.content;
       if (typeof text === 'string' && text.length > 0) {
         controller.enqueue(encoder.encode(text));
       }
-      // Log potential non-text chunks or errors if needed for debugging
-      // else if (chunk.functionCalls) { console.log("Received function call chunk:", chunk); }
-      // else if (chunk.error) { console.error("Received error chunk:", chunk.error); }
     }
   } catch (error) {
-    console.error('Error reading Gemini stream:', error);
-    // Propagate the error to the client via the stream
-    controller.error(error instanceof Error ? error : new Error('Gemini stream processing failed'));
+    console.error('Error reading OpenAI stream:', error);
+    controller.error(error instanceof Error ? error : new Error('OpenAI stream processing failed'));
   } finally {
-    // Ensure the stream is always closed
     try {
-        controller.close();
+      controller.close();
     } catch (closeError) {
-        // Ignore errors closing an already errored/closed stream
-        console.warn("Error closing stream controller (may be expected if stream already errored):", closeError);
+      console.warn("Error closing stream controller:", closeError);
     }
   }
 }
-
-/**
- * Fetches a PDF from a URL and returns its base64 representation.
- */
-async function fetchPdfAsBase64(url: string, resumeName: string): Promise<string | null> {
-    try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            console.warn(`Failed to fetch resume PDF: ${resumeName}, Status: ${response.status} ${response.statusText}, URL: ${url}`);
-            return null; // Indicate failure
-        }
-        if (response.headers.get('content-type')?.toLowerCase() !== 'application/pdf') {
-            console.warn(`Unexpected content type for resume PDF: ${resumeName}, Type: ${response.headers.get('content-type')}, URL: ${url}`);
-            // Decide if you want to return null or try processing anyway
-            // return null;
-        }
-        const fileBuffer = await response.arrayBuffer();
-        // Ensure buffer is not empty
-        if (fileBuffer.byteLength === 0) {
-            console.warn(`Fetched empty buffer for resume PDF: ${resumeName}, URL: ${url}`);
-            return null;
-        }
-        return Buffer.from(fileBuffer).toString('base64');
-    } catch (error) {
-        console.error(`Error fetching or processing resume PDF: ${resumeName}, URL: ${url}`, error);
-        return null; // Indicate failure
-    }
-}
-
 
 // --- API Route Handler ---
 
 export async function POST(request: Request): Promise<NextResponse> {
   return withRateLimit(request, rateLimiters.chat, async (req) => {
-    const supabase = await createClient(); // Renamed to avoid conflict with request
+    const supabase = await createClient();
     let user;
 
     // 1. Authentication
     try {
       const { data: authData, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError; // Throw Supabase auth errors
+      if (userError) throw userError;
       if (!authData.user) {
         return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
       }
-      user = authData.user; // Assign user for potential future use
+      user = authData.user;
     } catch (error: any) {
       console.error('Authentication Error:', error);
       return NextResponse.json(
@@ -157,17 +111,15 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     try {
       const body = await req.json();
-      // Add more specific validation if needed (e.g., using Zod)
       resumesInput = body.resumes;
       template = body.template;
       jobDescription = body.jobDescription;
       resumeInfo = body.resumeInfo;
 
-
-      console.log('Request Body resume ingo:', resumeInfo); // Log the entire request body
+      console.log('Request Body resume info:', resumeInfo);
 
       if (!template?.latex_content || !jobDescription) {
-        console.log('Gemini API Error: Missing required parameters (template or jobDescription)');
+        console.log('API Error: Missing required parameters (template or jobDescription)');
         return NextResponse.json(
           { error: 'Missing required parameters: template and jobDescription' },
           { status: 400 }
@@ -180,168 +132,83 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     // Normalize resumes to always be an array
     const resumeFiles: ResumeFile[] = Array.isArray(resumesInput)
-        ? resumesInput
-        : resumesInput
+      ? resumesInput
+      : resumesInput
         ? [resumesInput]
         : [];
 
-    // Log request details (consider sampling or reducing verbosity in production)
-    console.log('Processing Gemini Request:', {
-        userId: user.id, // Log user ID for traceability
-        templateId: template.id,
-        templateName: template.name,
-        jobDescriptionLength: jobDescription.length,
-        resumeFileCount: resumeFiles.length,
-        hasResumeInfo: !!resumeInfo,
-        timestamp: new Date().toISOString()
+    // Log request details
+    console.log('Processing OpenAI Request:', {
+      userId: user.id,
+      templateId: template.id,
+      templateName: template.name,
+      jobDescriptionLength: jobDescription.length,
+      resumeFileCount: resumeFiles.length,
+      hasResumeInfo: !!resumeInfo,
+      timestamp: new Date().toISOString()
     });
 
-    // 3. Prepare Content Parts for Gemini
-    const baseTextParts: Part[] = [
-        { text: `JOB DESCRIPTION:\n${jobDescription}\n\n` },
-        // Add structured info only if it exists and has content
-        ...(resumeInfo && Object.keys(resumeInfo).length > 0 // <-- Checks if resumeInfo exists and is not empty
-          ? [{ text: `STRUCTURED RESUME INFORMATION:\n${JSON.stringify(resumeInfo, null, 2)}\n\n` }]
-          : []),
-        { text: `LATEX TEMPLATE:\n${template.latex_content}\n\n` },
-    ];
+    // 3. Build the prompt
+    let prompt = `JOB DESCRIPTION:\n${jobDescription}\n\n`;
 
-    let contentParts: Part[] = [];
-    let attemptMultimodal = resumeFiles.some(resume => resume?.url); // Check if any resume has a URL
-    let streamResult: GenerateContentStreamResult | null = null;
-    let generationMode: 'multimodal' | 'text-only' | 'multimodal-fallback' = 'text-only'; // Track generation mode
+    if (resumeInfo && Object.keys(resumeInfo).length > 0) {
+      prompt += `STRUCTURED RESUME INFORMATION:\n${JSON.stringify(resumeInfo, null, 2)}\n\n`;
+    }
 
-    // 4. Attempt Multimodal Generation (if applicable)
-    if (attemptMultimodal) {
-      console.log(`Attempting multimodal generation with ${MODEL_NAME}`);
-      generationMode = 'multimodal';
-      const pdfParts: Part[] = [];
-      let pdfFetchSuccess = false; // Track if at least one PDF was processed
-
-      for (const resume of resumeFiles) {
-        if (resume.url) {
-          const base64Data = await fetchPdfAsBase64(resume.url, resume.name);
-          if (base64Data) {
-            pdfParts.push({
-              inlineData: { mimeType: 'application/pdf', data: base64Data }
-            });
-            // Optional: Add text part naming the PDF
-            pdfParts.push({ text: `\n[The above content is from resume PDF: ${resume.name}]\n` });
-            pdfFetchSuccess = true;
-          } else {
-             // Inform the model that a PDF was expected but failed
-            pdfParts.push({ text: `\n[Note: Failed to load or process resume PDF named: ${resume.name}]\n` });
-          }
-        }
-      }
-
-      // Only proceed with multimodal if at least one PDF was successfully processed
-      if (pdfFetchSuccess) {
-          contentParts = [
-              ...baseTextParts.slice(0, -1), // Add JD, structured info
-              ...pdfParts, // Add PDF data and notes
-              baseTextParts[baseTextParts.length - 1], // Add LaTeX Template
-              { text: `Based on the job description, the provided resume information (including processed PDFs), and the LaTeX template, generate the customized LaTeX resume code ONLY. Fill the template with relevant information matching the job requirements. Return ONLY the raw, valid LaTeX code without any extra text, comments, or markdown formatting.` }
-          ];
-
-          try {
-            streamResult = await model.generateContentStream({
-                contents: [{ role: 'user', parts: contentParts }],
-            });
-            console.log("Multimodal stream generation initiated successfully.");
-          } catch (multiModalError: any) {
-            console.error('Error during multimodal stream generation:', multiModalError);
-            // Log error but don't return yet, allow fallback to text-only
-            streamResult = null; // Ensure fallback happens
-            generationMode = 'multimodal-fallback';
-            console.log("Falling back to text-only generation due to multimodal error.");
-          }
-      } else {
-          console.log("No PDFs successfully processed, skipping multimodal attempt.");
-          // Proceed directly to text-only below
-          streamResult = null;
-          generationMode = 'text-only'; // Set explicitly as text-only from the start
+    // Note about resume files (OpenAI doesn't support PDF input directly in chat completions)
+    if (resumeFiles.length > 0) {
+      const resumeNames = resumeFiles.map(r => r.name).filter(Boolean).join(', ');
+      if (resumeNames) {
+        prompt += `NOTE: Resume files were provided (${resumeNames}). Use the STRUCTURED RESUME INFORMATION above.\n\n`;
       }
     }
 
-    // 5. Text-only Generation (if no PDFs, multimodal failed, or no PDFs processed)
-    if (!streamResult) {
-      // If we fell back, generationMode is already 'multimodal-fallback'
-      if (generationMode !== 'multimodal-fallback') generationMode = 'text-only';
-      console.log(`Using ${generationMode} generation with ${MODEL_NAME}`);
+    prompt += `LATEX TEMPLATE:\n${template.latex_content}\n\n`;
+    prompt += `Based on the job description, the provided structured resume information, and the LaTeX template, generate the customized LaTeX resume code ONLY. Fill the template with relevant information matching the job requirements. Return ONLY the raw, valid LaTeX code without any extra text, comments, or markdown formatting.`;
 
-      let textPrompt = baseTextParts.map(part => part.text).join(''); // Combine base texts
+    console.log(`Using OpenAI generation with ${MODEL_NAME}`);
 
-      // Add a note if PDFs were provided but not processed (either fetch failed or multimodal failed)
-      if (resumeFiles.length > 0) {
-          const resumeNames = resumeFiles.map(r => r.name).filter(Boolean).join(', ');
-          if(resumeNames) {
-            textPrompt += `NOTE: The following resume files were provided but could not be processed as PDFs: ${resumeNames}. Use the STRUCTURED RESUME INFORMATION primarily.\n\n`;
-          }
-      }
-
-      textPrompt += `Based on the job description, the provided structured resume information, and the LaTeX template, generate the customized LaTeX resume code ONLY. Fill the template with relevant information matching the job requirements. Return ONLY the raw, valid LaTeX code without any extra text, comments, or markdown formatting.`;
-
-      contentParts = [{ text: textPrompt }];
-
-      try {
-        streamResult = await model.generateContentStream({
-            contents: [{ role: 'user', parts: contentParts }],
-        });
-        console.log(`${generationMode} stream generation initiated successfully.`);
-      } catch (textOnlyError: any) {
-        console.error(`Error during ${generationMode} stream generation:`, textOnlyError);
-        // This is a fatal error for the request if both multimodal (if attempted) and text-only fail
-        return NextResponse.json(
-          { error: `Failed to generate content: ${textOnlyError.message || 'Unknown Gemini error'}` },
-          { status: 500 }
-        );
-      }
-    }
-
-    // 6. Stream the Response
-    if (!streamResult) {
-        // Should theoretically not happen if the above logic is correct, but as a safeguard:
-        console.error("Error: No stream result available after generation attempts.");
-        return NextResponse.json(
-            { error: 'Failed to initiate content generation stream.' },
-            { status: 500 }
-        );
-    }
-
+    // 4. Generate content with streaming
     try {
-        const stream = new ReadableStream({
-            start(controller) {
-                // Intentionally not awaited - runs in background
-                streamGeminiResponse(streamResult!, controller)
-                    .catch(streamError => {
-                        console.error("Error caught during stream processing in ReadableStream start:", streamError);
-                        // Controller might already be closed or errored, attempt to signal error if possible.
-                        try { controller.error(streamError); } catch (_) { /* Ignore */ }
-                    });
-            },
-            cancel(reason) {
-                console.log("Client cancelled the stream:", reason);
-                // Optional: Add logic here if Gemini SDK supports request cancellation
-                // streamResult?.cancel(); // Example if such a method existed
-            }
-        });
+      const stream = await openai.chat.completions.create({
+        model: MODEL_NAME,
+        messages: [
+          { role: 'system', content: SYSTEM_INSTRUCTION },
+          { role: 'user', content: prompt }
+        ],
+        stream: true,
+      });
 
-        return new NextResponse(stream, {
-            status: 200, // OK status for successful stream initiation
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-                'X-Content-Type-Options': 'nosniff',
-                'X-Generation-Mode': generationMode, // Custom header indicating mode used
-            },
-        });
-    } catch (streamSetupError) {
-        console.error("Error setting up response stream:", streamSetupError);
-        return NextResponse.json(
-            { error: 'Failed to set up response stream' },
-            { status: 500 }
-        );
+      // 5. Stream the Response
+      const responseStream = new ReadableStream({
+        start(controller) {
+          streamOpenAIResponse(stream, controller)
+            .catch(streamError => {
+              console.error("Error during stream processing:", streamError);
+              try { controller.error(streamError); } catch (_) { /* Ignore */ }
+            });
+        },
+        cancel(reason) {
+          console.log("Client cancelled the stream:", reason);
+        }
+      });
+
+      return new NextResponse(responseStream, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Generation-Mode': 'openai',
+        },
+      });
+
+    } catch (error: any) {
+      console.error('Error during OpenAI generation:', error);
+      return NextResponse.json(
+        { error: `Failed to generate content: ${error.message || 'Unknown OpenAI error'}` },
+        { status: 500 }
+      );
     }
 
-  }); // End of withRateLimit callback
-} // End of POST function
+  });
+}

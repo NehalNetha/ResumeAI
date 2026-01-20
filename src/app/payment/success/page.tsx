@@ -142,7 +142,7 @@ function PaymentSuccessContent() {
           Thank you for your purchase. Your credits have been added to your account and are ready to use.
         </p>
         
-        <div className="space-y-3">
+        <div className="space-y-2 flex flex-col ">
           <Link href="/dashboard">
             <Button className="w-full">Go to Dashboard</Button>
           </Link>
